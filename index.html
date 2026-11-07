@@ -133,6 +133,24 @@
   }
   .empty { color: var(--muted); font-style: italic; }
 
+  /* Heading that folds a section open and closed */
+  .collapse-toggle {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    background: none; color: inherit;
+    font-size: inherit; font-weight: inherit;
+    padding: 4px 0; text-align: left;
+  }
+  .collapse-toggle:hover { background: none; color: var(--accent); }
+  .collapse-toggle .arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px;
+    background: #ece7de; font-size: 1.1rem;
+    transition: transform 0.2s ease;
+  }
+  .collapse-toggle[aria-expanded="false"] .arrow { transform: rotate(-90deg); }
+  h2:has(.collapse-toggle[aria-expanded="false"]) { margin-bottom: 0; }
+
   .dinner {
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -212,11 +230,18 @@
 
   <!-- Shopping list -->
   <section>
-    <h2>Handleliste</h2>
-    <div id="shoppingList"></div>
-    <div class="form-buttons" id="shoppingButtons">
-      <button class="secondary" id="clearTicksBtn">Fjern alle haker</button>
-      <button class="secondary" id="editCategoriesBtn">Endre kategorier</button>
+    <h2>
+      <button class="collapse-toggle" id="shoppingToggle" aria-expanded="true" aria-controls="shoppingBody">
+        <span>Handleliste</span>
+        <span class="arrow" aria-hidden="true">▾</span>
+      </button>
+    </h2>
+    <div id="shoppingBody">
+      <div id="shoppingList"></div>
+      <div class="form-buttons" id="shoppingButtons">
+        <button class="secondary" id="clearTicksBtn">Fjern alle haker</button>
+        <button class="secondary" id="editCategoriesBtn">Endre kategorier</button>
+      </div>
     </div>
   </section>
 
@@ -604,6 +629,22 @@
     }
     save();
     renderShopping();
+  });
+
+  // Fold the shopping list open or closed (remembered for next time)
+  const SHOPPING_OPEN_KEY = "dinnerPlanner.shoppingOpen";
+  const shoppingToggle = document.getElementById("shoppingToggle");
+  const shoppingBody = document.getElementById("shoppingBody");
+  function showShoppingOpen(open) {
+    shoppingBody.hidden = !open;
+    shoppingToggle.setAttribute("aria-expanded", open);
+    shoppingToggle.title = open ? "Skjul handlelisten" : "Vis handlelisten";
+  }
+  showShoppingOpen(loadSaved(SHOPPING_OPEN_KEY, true));
+  shoppingToggle.addEventListener("click", () => {
+    const open = shoppingBody.hidden; // it was closed, so now open it (and the other way round)
+    showShoppingOpen(open);
+    try { localStorage.setItem(SHOPPING_OPEN_KEY, JSON.stringify(open)); } catch (e) {}
   });
 
   clearTicksBtn.addEventListener("click", () => {
