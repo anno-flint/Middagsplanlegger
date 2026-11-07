@@ -67,6 +67,27 @@
   .form-buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .form-buttons button { flex: 1; }
 
+  /* Picture picker in the form */
+  .photo-picker { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .photo-preview {
+    width: 96px; height: 96px; object-fit: cover;
+    border-radius: 12px; border: 1px solid var(--border);
+  }
+  .photo-buttons { display: flex; gap: 10px; flex-wrap: wrap; flex: 1; }
+  .photo-buttons button { flex: 1; min-width: 150px; }
+
+  /* Small dinner pictures (thumbnails) */
+  .thumb {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: #f1ece3;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .thumb.big { width: 72px; height: 72px; font-size: 2rem; border-radius: 12px; }
+
   .week { list-style: none; padding: 0; margin: 16px 0 0; }
   .week li {
     display: flex;
@@ -78,7 +99,7 @@
   }
   .week li.locked { background: #eef6f1; }
   .week .day { font-weight: 700; width: 100px; flex-shrink: 0; color: var(--accent); }
-  .week .meal { flex: 1; }
+  .week .meal { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .week .lock {
     flex-shrink: 0;
     min-width: 48px;
@@ -118,8 +139,10 @@
     padding: 14px;
     margin-top: 12px;
   }
+  .dinner-top { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+  .dinner-top .info { flex: 1; min-width: 0; }
   .dinner h3 { margin: 0 0 6px; font-size: 1.1rem; }
-  .dinner p { margin: 0 0 12px; color: var(--muted); }
+  .dinner p { margin: 0; color: var(--muted); }
   .dinner .actions { display: flex; gap: 10px; }
   .dinner .actions button { flex: 1; }
 
@@ -168,7 +191,9 @@
   }
 
   @media (max-width: 480px) {
-    .week .day { width: 85px; }
+    .week li { gap: 8px; }
+    .week .day { width: 72px; }
+    .week .thumb { width: 40px; height: 40px; }
   }
 </style>
 </head>
@@ -205,6 +230,16 @@
       <label for="ingredientsInput">Ingredienser</label>
       <textarea id="ingredientsInput" placeholder="Én ingrediens per linje"></textarea>
       <div class="hint">Skriv én ingrediens på hver linje.</div>
+
+      <label>Bilde</label>
+      <div class="photo-picker">
+        <img id="photoPreview" class="photo-preview" alt="Bilde av middagen" hidden>
+        <div class="photo-buttons">
+          <button type="button" class="secondary" id="choosePhotoBtn">📷 Legg til bilde</button>
+          <button type="button" class="danger" id="removePhotoBtn" hidden>Fjern bilde</button>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" hidden>
+      </div>
 
       <div class="form-buttons">
         <button type="submit" id="saveBtn">Legg til middag</button>
@@ -403,6 +438,13 @@
     return div.innerHTML;
   }
 
+  // A small picture of the dinner, or a plate icon if it has no picture
+  function thumbHtml(dinner, size) {
+    const cls = `thumb ${size || ""}`;
+    if (dinner && dinner.photo) return `<img class="${cls}" src="${escapeAttr(dinner.photo)}" alt="">`;
+    return `<span class="${cls}" aria-hidden="true">🍽️</span>`;
+  }
+
   // ---------- Show dinners ----------
   function renderDinners() {
     dinnerCount.textContent = dinners.length;
@@ -413,8 +455,13 @@
     const sorted = dinners.slice().sort((a, b) => a.name.localeCompare(b.name, "nb"));
     dinnerList.innerHTML = sorted.map(d => `
       <div class="dinner">
-        <h3>${escapeHtml(d.name)}</h3>
-        <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "Ingen ingredienser lagt til"}</p>
+        <div class="dinner-top">
+          ${thumbHtml(d, "big")}
+          <div class="info">
+            <h3>${escapeHtml(d.name)}</h3>
+            <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "Ingen ingredienser lagt til"}</p>
+          </div>
+        </div>
         <div class="actions">
           <button class="secondary" data-edit="${d.id}">Rediger</button>
           <button class="danger" data-delete="${d.id}">Slett</button>
@@ -437,6 +484,7 @@
       const lockText = `${isLocked ? "Lås opp" : "Lås"} ${day.toLowerCase()}`;
       return `<li class="${isLocked ? "locked" : ""}">
         <span class="day">${day}</span>
+        ${thumbHtml(dinner)}
         <span class="meal">${name}</span>
         <button class="lock" data-day="${i}" title="${lockText}"
           aria-label="${lockText}"><span class="icon">${isLocked ? "🔒" : "🔓"}</span></button>
@@ -616,6 +664,61 @@
     renderWeek();
   });
 
+  // ---------- Picture for a dinner ----------
+  const photoInput = document.getElementById("photoInput");
+  const photoPreview = document.getElementById("photoPreview");
+  const choosePhotoBtn = document.getElementById("choosePhotoBtn");
+  const removePhotoBtn = document.getElementById("removePhotoBtn");
+  const PHOTO_SIZE = 240; // pictures are shrunk to a 240×240 square so they take little space
+  let formPhoto = null;   // the picture currently chosen in the form, or null
+
+  function showFormPhoto() {
+    photoPreview.hidden = !formPhoto;
+    if (formPhoto) photoPreview.src = formPhoto;
+    else photoPreview.removeAttribute("src");
+    removePhotoBtn.hidden = !formPhoto;
+    choosePhotoBtn.textContent = formPhoto ? "📷 Bytt bilde" : "📷 Legg til bilde";
+  }
+
+  // Shrinks a picture to a small square (cut from the middle) and returns it as text that can be saved
+  function shrinkPhoto(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = PHOTO_SIZE;
+        canvas.getContext("2d").drawImage(img,
+          (img.width - side) / 2, (img.height - side) / 2, side, side,
+          0, 0, PHOTO_SIZE, PHOTO_SIZE);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(); };
+      img.src = url;
+    });
+  }
+
+  choosePhotoBtn.addEventListener("click", () => photoInput.click());
+
+  photoInput.addEventListener("change", async () => {
+    const file = photoInput.files[0];
+    photoInput.value = ""; // so the same picture can be chosen again later
+    if (!file) return;
+    try {
+      formPhoto = await shrinkPhoto(file);
+      showFormPhoto();
+    } catch (e) {
+      alert("Beklager, dette bildet kunne ikke åpnes. Prøv et annet bilde.");
+    }
+  });
+
+  removePhotoBtn.addEventListener("click", () => {
+    formPhoto = null;
+    showFormPhoto();
+  });
+
   // ---------- Add / edit form ----------
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -631,9 +734,13 @@
       if (dinner) {
         dinner.name = name;
         dinner.ingredients = ingredients;
+        if (formPhoto) dinner.photo = formPhoto;
+        else delete dinner.photo;
       }
     } else {
-      dinners.push({ id: makeId(), name, ingredients });
+      const dinner = { id: makeId(), name, ingredients };
+      if (formPhoto) dinner.photo = formPhoto;
+      dinners.push(dinner);
     }
     save();
     resetForm();
@@ -646,6 +753,8 @@
   function resetForm() {
     editingId = null;
     form.reset();
+    formPhoto = null;
+    showFormPhoto();
     formTitle.textContent = "Legg til middag";
     saveBtn.textContent = "Legg til middag";
     cancelBtn.hidden = true;
@@ -657,6 +766,8 @@
     editingId = id;
     nameInput.value = dinner.name;
     ingredientsInput.value = dinner.ingredients.join("\n");
+    formPhoto = dinner.photo || null;
+    showFormPhoto();
     formTitle.textContent = "Rediger middag";
     saveBtn.textContent = "Lagre endringer";
     cancelBtn.hidden = false;
