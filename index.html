@@ -74,6 +74,7 @@
   .hint { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
   .form-buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .form-buttons button { flex: 1; }
+  .form-buttons button.wide { flex-basis: 100%; }
 
   /* Heading with a button on the right */
   .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -267,6 +268,7 @@
     <div id="shoppingBody">
       <div id="shoppingList"></div>
       <div class="form-buttons" id="shoppingButtons">
+        <button class="wide" id="shareBtn">📤 Del handlelisten</button>
         <button class="secondary" id="clearTicksBtn">Fjern alle haker</button>
         <button class="secondary" id="editCategoriesBtn">Endre kategorier</button>
       </div>
@@ -685,6 +687,53 @@
     const open = shoppingBody.hidden; // it was closed, so now open it (and the other way round)
     showShoppingOpen(open);
     try { localStorage.setItem(SHOPPING_OPEN_KEY, JSON.stringify(open)); } catch (e) {}
+  });
+
+  // ---------- Share the shopping list ----------
+  const shareBtn = document.getElementById("shareBtn");
+
+  // Make the list as plain text, grouped by category. Ticked items are left out.
+  function shoppingListAsText() {
+    const items = getShoppingItems().filter(item => !checked.includes(item.key));
+    let text = "Handleliste";
+    CATEGORY_ORDER.forEach(category => {
+      const inCategory = items
+        .filter(item => categoryOf(item.key) === category)
+        .sort((a, b) => a.name.localeCompare(b.name, "nb"));
+      if (inCategory.length === 0) return;
+      text += `\n\n${CATEGORY_LABELS[category]}`;
+      inCategory.forEach(item => {
+        text += `\n- ${item.name}${item.count > 1 ? ` ×${item.count}` : ""}`;
+      });
+    });
+    return items.length === 0 ? "Handleliste\n\nAlt er handlet! 🎉" : text;
+  }
+
+  function showShareMessage(message) {
+    shareBtn.textContent = message;
+    setTimeout(() => { shareBtn.textContent = "📤 Del handlelisten"; }, 2500);
+  }
+
+  shareBtn.addEventListener("click", async () => {
+    const text = shoppingListAsText();
+    // On phones (and some computers): open the built-in share menu
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Handleliste", text });
+      } catch (e) {
+        // Closing the share menu without choosing anything is fine – do nothing
+      }
+      return;
+    }
+    // Otherwise: copy the list so it can be pasted into an e-mail or message
+    try {
+      await navigator.clipboard.writeText(text);
+      showShareMessage("✅ Kopiert! Lim inn der du vil");
+    } catch (e) {
+      // Last resort: open a new e-mail with the list in it
+      window.location.href = "mailto:?subject=" + encodeURIComponent("Handleliste") +
+        "&body=" + encodeURIComponent(text);
+    }
   });
 
   clearTicksBtn.addEventListener("click", () => {
