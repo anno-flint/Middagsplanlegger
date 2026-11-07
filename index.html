@@ -75,6 +75,9 @@
   .form-buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .form-buttons button { flex: 1; }
   .form-buttons button.wide { flex-basis: 100%; }
+  .share-fallback { margin-top: 14px; background: #f6f2ea; border-radius: 10px; padding: 12px; }
+  .share-fallback p { margin: 0 0 8px; font-weight: 600; }
+  .share-fallback textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px; }
 
   /* Heading with a button on the right */
   .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -271,6 +274,11 @@
         <button class="wide" id="shareBtn">📤 Del handlelisten</button>
         <button class="secondary" id="clearTicksBtn">Fjern alle haker</button>
         <button class="secondary" id="editCategoriesBtn">Endre kategorier</button>
+      </div>
+      <div class="share-fallback" id="shareFallback" hidden>
+        <p>Kopier teksten under og lim den inn der du vil:</p>
+        <textarea id="shareText" rows="10" readonly></textarea>
+        <button class="secondary wide" id="shareCloseBtn">Lukk</button>
       </div>
     </div>
   </section>
@@ -730,10 +738,18 @@
       await navigator.clipboard.writeText(text);
       showShareMessage("✅ Kopiert! Lim inn der du vil");
     } catch (e) {
-      // Last resort: open a new e-mail with the list in it
-      window.location.href = "mailto:?subject=" + encodeURIComponent("Handleliste") +
-        "&body=" + encodeURIComponent(text);
+      // Last resort: show the list in a box, already selected, so it can be copied by hand
+      shareText.value = text;
+      shareFallback.hidden = false;
+      shareText.focus();
+      shareText.select();
     }
+  });
+
+  const shareFallback = document.getElementById("shareFallback");
+  const shareText = document.getElementById("shareText");
+  document.getElementById("shareCloseBtn").addEventListener("click", () => {
+    shareFallback.hidden = true;
   });
 
   clearTicksBtn.addEventListener("click", () => {
