@@ -102,6 +102,50 @@
   .dinner .actions { display: flex; gap: 10px; }
   .dinner .actions button { flex: 1; }
 
+  .category-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 18px 0 4px;
+  }
+  .category-title:first-child { margin-top: 0; }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .item label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 10px 4px;
+    font-weight: 400;
+    cursor: pointer;
+    min-height: 48px;
+  }
+  .item input[type="checkbox"] {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+  }
+  .item .count { color: var(--muted); font-size: 0.9rem; }
+  .item.checked .name { text-decoration: line-through; color: var(--muted); }
+  .item select {
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    max-width: 45%;
+  }
+
   @media (max-width: 480px) {
     .week .day { width: 85px; }
   }
@@ -118,6 +162,16 @@
     <button class="wide" id="pickWeekBtn">🎲 Pick my week</button>
     <div class="hint">Tap 🔓 to lock a dinner you like. Picking again only changes the unlocked days.</div>
     <ul class="week" id="weekList"></ul>
+  </section>
+
+  <!-- Shopping list -->
+  <section>
+    <h2>Shopping list</h2>
+    <div id="shoppingList"></div>
+    <div class="form-buttons" id="shoppingButtons">
+      <button class="secondary" id="clearTicksBtn">Clear ticks</button>
+      <button class="secondary" id="editCategoriesBtn">Change categories</button>
+    </div>
   </section>
 
   <!-- Add / edit form -->
@@ -150,6 +204,37 @@
   const DINNERS_KEY = "dinnerPlanner.dinners";
   const WEEK_KEY = "dinnerPlanner.week";
   const LOCKED_KEY = "dinnerPlanner.locked";
+  const CHECKED_KEY = "dinnerPlanner.checked";
+  const MY_CATEGORIES_KEY = "dinnerPlanner.myCategories";
+
+  // Shopping list categories, in the order they are shown (like walking through a shop)
+  const CATEGORY_ORDER = [
+    "Fruit & vegetables", "Bread & bakery", "Meat & fish", "Dairy & eggs",
+    "Dry goods", "Spices & sauces", "Frozen", "Other"
+  ];
+
+  // Words used to guess an ingredient's category.
+  // Checked from top to bottom, and the first match wins
+  // (so "coconut milk" becomes Dry goods before "milk" can make it Dairy).
+  const CATEGORY_WORDS = [
+    ["Fruit & vegetables", ["bell pepper", "sweet pepper", "red pepper", "green pepper", "eggplant"]],
+    ["Frozen", ["frozen", "fish finger", "ice cream"]],
+    ["Spices & sauces", ["spice", "seasoning", "salt", "pepper", "sauce", "paste", "ketchup", "mustard",
+      "mayo", "remoulade", "dressing", "soy", "vinegar", "oil", "curry", "cumin", "paprika", "oregano",
+      "cinnamon", "pesto", "salsa", "chili powder"]],
+    ["Dry goods", ["canned", "tinned", "stock", "broth", "coconut milk", "pasta", "spaghetti", "macaroni",
+      "noodle", "lasagne", "lasagna", "rice", "flour", "sugar", "taco shell", "tortilla", "lentil",
+      "chickpea", "kidney bean", "oat", "cereal", "nuts", "crisps"]],
+    ["Bread & bakery", ["bread", "dough", "bun", "baguette", "pita", "naan", "wrap", "crispbread"]],
+    ["Meat & fish", ["beef", "mince", "pork", "chicken", "turkey", "lamb", "bacon", "ham", "sausage",
+      "salami", "meat", "steak", "fish", "salmon", "cod", "tuna", "shrimp", "prawn", "mussel", "fillet"]],
+    ["Dairy & eggs", ["milk", "cream", "cheese", "butter", "yogurt", "yoghurt", "egg", "mozzarella",
+      "parmesan", "feta", "cottage", "margarine"]],
+    ["Fruit & vegetables", ["onion", "garlic", "potato", "carrot", "tomato", "lettuce", "salad", "cucumber",
+      "broccoli", "leek", "lemon", "lime", "apple", "banana", "mushroom", "pea", "spinach", "cabbage",
+      "cauliflower", "avocado", "corn", "zucchini", "courgette", "ginger", "herb", "parsley", "coriander",
+      "basil", "celery", "bean", "berr", "fruit", "vegetable", "squash", "pumpkin", "chili", "orange"]]
+  ];
   const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   const EXAMPLE_DINNERS = [
@@ -188,11 +273,21 @@
     return [false, false, false, false, false, false, false];
   }
 
+  function loadSaved(key, fallback) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return fallback;
+  }
+
   function save() {
     try {
       localStorage.setItem(DINNERS_KEY, JSON.stringify(dinners));
       localStorage.setItem(WEEK_KEY, JSON.stringify(week));
       localStorage.setItem(LOCKED_KEY, JSON.stringify(locked));
+      localStorage.setItem(CHECKED_KEY, JSON.stringify(checked));
+      localStorage.setItem(MY_CATEGORIES_KEY, JSON.stringify(myCategories));
     } catch (e) {
       alert("Sorry, your dinners could not be saved in this browser.");
     }
@@ -205,6 +300,9 @@
   let dinners = loadDinners();
   let week = loadWeek();     // list of 7 dinner ids, Monday to Sunday
   let locked = loadLocked(); // 7 true/false values: is that day locked?
+  let checked = loadSaved(CHECKED_KEY, []);           // ingredients ticked off in the shopping list
+  let myCategories = loadSaved(MY_CATEGORIES_KEY, {}); // categories you chose yourself
+  let editingCategories = false;
   let editingId = null;      // id of the dinner being edited, or null when adding
   save();
 
@@ -251,6 +349,7 @@
   function renderWeek() {
     if (week.length === 0) {
       weekList.innerHTML = '<li class="empty">Tap "Pick my week" to get 7 dinners.</li>';
+      renderShopping();
       return;
     }
     weekList.innerHTML = DAYS.map((day, i) => {
@@ -265,7 +364,129 @@
           aria-label="${isLocked ? "Unlock" : "Lock"} ${day}">${isLocked ? "🔒" : "🔓"}</button>
       </li>`;
     }).join("");
+    renderShopping();
   }
+
+  // ---------- Shopping list ----------
+  const shoppingList = document.getElementById("shoppingList");
+  const shoppingButtons = document.getElementById("shoppingButtons");
+  const clearTicksBtn = document.getElementById("clearTicksBtn");
+  const editCategoriesBtn = document.getElementById("editCategoriesBtn");
+
+  // Makes text safe to put inside an HTML attribute
+  function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, "&quot;");
+  }
+
+  // Guess the category from words in the ingredient name
+  function guessCategory(key) {
+    for (const [category, words] of CATEGORY_WORDS) {
+      for (const word of words) {
+        // The word must start at the beginning of a word in the ingredient
+        const start = key.indexOf(word);
+        if (start === -1) continue;
+        if (start === 0 || !/[a-zæøå]/.test(key[start - 1])) return category;
+      }
+    }
+    return "Other";
+  }
+
+  function categoryOf(key) {
+    return myCategories[key] || guessCategory(key);
+  }
+
+  // Collect all ingredients from the week, combining duplicates
+  function getShoppingItems() {
+    const items = new Map();
+    week.forEach(id => {
+      const dinner = dinners.find(d => d.id === id);
+      if (!dinner) return;
+      dinner.ingredients.forEach(ingredient => {
+        const name = ingredient.trim();
+        const key = name.toLowerCase();
+        if (!key) return;
+        if (!items.has(key)) items.set(key, { key, name, count: 0 });
+        items.get(key).count++;
+      });
+    });
+    return [...items.values()];
+  }
+
+  function renderShopping() {
+    const items = getShoppingItems();
+    shoppingButtons.hidden = items.length === 0;
+    if (items.length === 0) {
+      shoppingList.innerHTML = '<p class="empty">Pick your week to see the shopping list.</p>';
+      return;
+    }
+
+    // Forget ticks for ingredients that are no longer on the list
+    const stillNeeded = checked.filter(key => items.some(item => item.key === key));
+    if (stillNeeded.length !== checked.length) {
+      checked = stillNeeded;
+      save();
+    }
+
+    let html = "";
+    CATEGORY_ORDER.forEach(category => {
+      const inCategory = items
+        .filter(item => categoryOf(item.key) === category)
+        .sort((a, b) => {
+          // Not-ticked items first, then ticked items at the bottom
+          const tickDiff = checked.includes(a.key) - checked.includes(b.key);
+          return tickDiff || a.name.localeCompare(b.name);
+        });
+      if (inCategory.length === 0) return;
+
+      html += `<h3 class="category-title">${category}</h3>`;
+      inCategory.forEach(item => {
+        const isChecked = checked.includes(item.key);
+        const options = CATEGORY_ORDER.map(c =>
+          `<option ${c === category ? "selected" : ""}>${c}</option>`).join("");
+        html += `
+          <div class="item ${isChecked ? "checked" : ""}">
+            <label>
+              <input type="checkbox" data-key="${escapeAttr(item.key)}" ${isChecked ? "checked" : ""}>
+              <span class="name">${escapeHtml(item.name)}</span>
+              ${item.count > 1 ? `<span class="count">×${item.count}</span>` : ""}
+            </label>
+            ${editingCategories
+              ? `<select data-key="${escapeAttr(item.key)}" aria-label="Category for ${escapeAttr(item.name)}">${options}</select>`
+              : ""}
+          </div>`;
+      });
+    });
+    shoppingList.innerHTML = html;
+  }
+
+  // Tick an item, or change its category
+  shoppingList.addEventListener("change", (event) => {
+    const key = event.target.dataset.key;
+    if (!key) return;
+    if (event.target.type === "checkbox") {
+      if (event.target.checked) {
+        checked.push(key);
+      } else {
+        checked = checked.filter(k => k !== key);
+      }
+    } else if (event.target.tagName === "SELECT") {
+      myCategories[key] = event.target.value;
+    }
+    save();
+    renderShopping();
+  });
+
+  clearTicksBtn.addEventListener("click", () => {
+    checked = [];
+    save();
+    renderShopping();
+  });
+
+  editCategoriesBtn.addEventListener("click", () => {
+    editingCategories = !editingCategories;
+    editCategoriesBtn.textContent = editingCategories ? "Done" : "Change categories";
+    renderShopping();
+  });
 
   // ---------- Lock / unlock a day ----------
   weekList.addEventListener("click", (event) => {
