@@ -52,7 +52,15 @@
   button.secondary:hover { background: #e0d9cc; }
   button.danger { background: #fbeae8; color: var(--danger); }
   button.danger:hover { background: #f5d6d2; }
+  button.danger-strong { background: var(--danger); color: #fff; }
+  button.danger-strong:hover { background: #a93226; }
   button.wide { width: 100%; }
+  .confirm-delete {
+    background: #fbeae8;
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .confirm-delete p { margin: 0 0 10px; font-weight: 600; color: var(--danger); }
   label { display: block; font-weight: 600; margin: 12px 0 6px; }
   input, textarea {
     font: inherit;
@@ -465,6 +473,7 @@
   let myCategories = loadSaved(MY_CATEGORIES_KEY, {}); // categories you chose yourself
   let editingCategories = false;
   let editingId = null;      // id of the dinner being edited, or null when adding
+  let confirmingDeleteId = null; // id of the dinner asking «Vil du slette?», or null
   save();
 
   // ---------- Page elements ----------
@@ -510,10 +519,18 @@
             <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "Ingen ingredienser lagt til"}</p>
           </div>
         </div>
+        ${confirmingDeleteId === d.id ? `
+        <div class="confirm-delete">
+          <p>Vil du slette «${escapeHtml(d.name)}»?</p>
+          <div class="actions">
+            <button class="danger-strong" data-confirm-delete="${d.id}">Ja, slett</button>
+            <button class="secondary" data-cancel-delete="${d.id}">Avbryt</button>
+          </div>
+        </div>` : `
         <div class="actions">
           <button class="secondary" data-edit="${d.id}">Rediger</button>
           <button class="danger" data-delete="${d.id}">Slett</button>
-        </div>
+        </div>`}
       </div>
     `).join("");
   }
@@ -855,19 +872,28 @@
   }
 
   // ---------- Edit and delete buttons ----------
+  // Tapping «Slett» first asks «Vil du slette …?» inside the card.
+  // The dinner is only deleted after tapping «Ja, slett».
   dinnerList.addEventListener("click", (event) => {
-    const editId = event.target.dataset.edit;
-    const deleteId = event.target.dataset.delete;
-    if (editId) startEditing(editId);
-    if (deleteId) {
-      const dinner = dinners.find(d => d.id === deleteId);
-      if (dinner && confirm(`Slette «${dinner.name}»?`)) {
-        dinners = dinners.filter(d => d.id !== deleteId);
-        if (editingId === deleteId) resetForm();
-        save();
-        renderDinners();
-        renderWeek();
-      }
+    const data = event.target.dataset;
+    if (data.edit) {
+      confirmingDeleteId = null;
+      renderDinners();
+      startEditing(data.edit);
+    } else if (data.delete) {
+      confirmingDeleteId = data.delete;
+      renderDinners();
+    } else if (data.cancelDelete) {
+      confirmingDeleteId = null;
+      renderDinners();
+    } else if (data.confirmDelete) {
+      const deleteId = data.confirmDelete;
+      dinners = dinners.filter(d => d.id !== deleteId);
+      confirmingDeleteId = null;
+      if (editingId === deleteId) resetForm();
+      save();
+      renderDinners();
+      renderWeek();
     }
   });
 
