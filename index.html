@@ -67,6 +67,23 @@
   .form-buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .form-buttons button { flex: 1; }
 
+  /* Heading with a button on the right */
+  .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .section-head h2 { margin: 0; }
+  .section-head button { flex-shrink: 0; }
+
+  /* The add / edit form inside «Mine middager» */
+  .form-box {
+    background: #f6f1e8;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 8px;
+    scroll-margin-top: 12px;
+  }
+  .form-box h3 { margin: 0 0 4px; font-size: 1.15rem; }
+  .form-box label:first-of-type { margin-top: 8px; }
+
   /* Picture picker in the form */
   .photo-picker { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .photo-preview {
@@ -245,9 +262,15 @@
     </div>
   </section>
 
-  <!-- Add / edit form -->
+  <!-- Saved dinners, with the add / edit form -->
   <section>
-    <h2 id="formTitle">Legg til middag</h2>
+    <div class="section-head">
+      <h2>Mine middager (<span id="dinnerCount">0</span>)</h2>
+      <button id="addDinnerBtn">＋ Legg til</button>
+    </div>
+
+    <div class="form-box" id="formBox" hidden>
+    <h3 id="formTitle">Legg til middag</h3>
     <form id="dinnerForm">
       <label for="nameInput">Navn på middagen</label>
       <input id="nameInput" type="text" placeholder="f.eks. Fisketaco" required>
@@ -267,15 +290,12 @@
       </div>
 
       <div class="form-buttons">
-        <button type="submit" id="saveBtn">Legg til middag</button>
-        <button type="button" class="secondary" id="cancelBtn" hidden>Avbryt</button>
+        <button type="submit" id="saveBtn">Lagre</button>
+        <button type="button" class="secondary" id="cancelBtn">Avbryt</button>
       </div>
     </form>
-  </section>
+    </div>
 
-  <!-- Saved dinners -->
-  <section>
-    <h2>Mine middager (<span id="dinnerCount">0</span>)</h2>
     <div id="dinnerList"></div>
   </section>
 </main>
@@ -791,14 +811,31 @@
 
   cancelBtn.addEventListener("click", resetForm);
 
+  // Show the form inside «Mine middager» and jump to it
+  const formBox = document.getElementById("formBox");
+  const addDinnerBtn = document.getElementById("addDinnerBtn");
+  function openForm() {
+    formBox.hidden = false;
+    addDinnerBtn.hidden = true;
+    formBox.scrollIntoView({ behavior: "smooth", block: "start" });
+    nameInput.focus({ preventScroll: true });
+  }
+
+  addDinnerBtn.addEventListener("click", () => {
+    resetForm();
+    openForm();
+  });
+
+  // Empty the form and fold it away
   function resetForm() {
     editingId = null;
     form.reset();
     formPhoto = null;
     showFormPhoto();
     formTitle.textContent = "Legg til middag";
-    saveBtn.textContent = "Legg til middag";
-    cancelBtn.hidden = true;
+    saveBtn.textContent = "Lagre";
+    formBox.hidden = true;
+    addDinnerBtn.hidden = false;
   }
 
   function startEditing(id) {
@@ -811,9 +848,7 @@
     showFormPhoto();
     formTitle.textContent = "Rediger middag";
     saveBtn.textContent = "Lagre endringer";
-    cancelBtn.hidden = false;
-    form.scrollIntoView({ behavior: "smooth", block: "start" });
-    nameInput.focus();
+    openForm();
   }
 
   // ---------- Edit and delete buttons ----------
