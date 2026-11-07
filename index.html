@@ -229,6 +229,9 @@
     .week li { gap: 8px; }
     .week .day { width: 72px; }
     .week .thumb { width: 40px; height: 40px; }
+    /* On a phone, the add button goes under the heading, full width */
+    .section-head { flex-wrap: wrap; }
+    .section-head button { width: 100%; }
   }
 </style>
 </head>
@@ -266,7 +269,7 @@
   <section>
     <div class="section-head">
       <h2>Mine middager (<span id="dinnerCount">0</span>)</h2>
-      <button id="addDinnerBtn">＋ Legg til</button>
+      <button id="addDinnerBtn">＋ Legg til middag</button>
     </div>
 
     <div class="form-box" id="formBox" hidden>
