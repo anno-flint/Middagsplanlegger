@@ -561,8 +561,8 @@
         <span class="day">${day}</span>
         ${thumbHtml(dinner)}
         <span class="meal">${name}</span>
-        <button class="lock" data-day="${i}" title="${lockText}"
-          aria-label="${lockText}"><span class="icon">${isLocked ? "🔒" : "🔓"}</span></button>
+        ${dinner ? `<button class="lock" data-day="${i}" title="${lockText}"
+          aria-label="${lockText}"><span class="icon">${isLocked ? "🔒" : "🔓"}</span></button>` : ""}
       </li>`;
     }).join("");
     renderShopping();
