@@ -89,6 +89,27 @@
   .week .lock:hover { background: #e0d9cc; }
   .week li.locked .lock { background: var(--accent); }
   .week li.locked .lock:hover { background: var(--accent-dark); }
+  .week .lock .icon { display: inline-block; }
+  /* Locking: the padlock squeezes shut and pops back with a little click */
+  .week .lock.anim-lock .icon { animation: lockShut 0.45s ease-out; }
+  @keyframes lockShut {
+    0%   { transform: scale(1) translateY(0); }
+    30%  { transform: scale(1.25, 0.8) translateY(3px); }
+    60%  { transform: scale(0.9, 1.15) translateY(-2px); }
+    100% { transform: scale(1) translateY(0); }
+  }
+  /* Unlocking: the padlock jumps up and wiggles open */
+  .week .lock.anim-unlock .icon { animation: lockOpen 0.5s ease-out; }
+  @keyframes lockOpen {
+    0%   { transform: translateY(0) rotate(0); }
+    25%  { transform: translateY(-5px) rotate(-15deg); }
+    50%  { transform: translateY(-3px) rotate(10deg); }
+    75%  { transform: translateY(0) rotate(-5deg); }
+    100% { transform: translateY(0) rotate(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .week .lock .icon { animation: none !important; }
+  }
   .empty { color: var(--muted); font-style: italic; }
 
   .dinner {
@@ -418,7 +439,7 @@
         <span class="day">${day}</span>
         <span class="meal">${name}</span>
         <button class="lock" data-day="${i}" title="${lockText}"
-          aria-label="${lockText}">${isLocked ? "🔒" : "🔓"}</button>
+          aria-label="${lockText}"><span class="icon">${isLocked ? "🔒" : "🔓"}</span></button>
       </li>`;
     }).join("");
     renderShopping();
@@ -557,6 +578,9 @@
     locked[i] = !locked[i];
     save();
     renderWeek();
+    // Play the open/close animation on the button that was tapped
+    const newButton = weekList.querySelector(`.lock[data-day="${i}"]`);
+    if (newButton) newButton.classList.add(locked[i] ? "anim-lock" : "anim-unlock");
   });
 
   // ---------- Pick 7 random dinners ----------
