@@ -19,12 +19,8 @@ A simple web page for planning a week of dinners and generating a shopping list.
 - No frameworks, no build tools, no installations. It must work by simply opening the file in a browser.
 - Save all data in the browser (localStorage) so it stays when I reopen the page.
 - Must work well on both computer and phone.
-
-## Features (build in this order)
-1. Add, edit and delete dinners (name + list of ingredients).
-2. Randomly pick 7 dinners for the week, shown Monday to Sunday.
-3. Generate a shopping list from the week's dinners, combining duplicate ingredients, with checkboxes.
-4. Clean, friendly design.
+- Clean, friendly design.
+- app Language in Norwegian.
 
 ## Style
 - Simple, clean and easy to read.

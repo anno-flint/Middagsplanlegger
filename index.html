@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="no">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dinner Planner</title>
+<title>Middagsplanlegger</title>
 <style>
   :root {
     --bg: #faf7f2;
@@ -153,48 +153,48 @@
 </head>
 <body>
 <main>
-  <h1>Dinner Planner</h1>
-  <p class="subtitle">Save your dinners and let the page plan your week.</p>
+  <h1>Middagsplanlegger</h1>
+  <p class="subtitle">Lagre middagene dine og la siden planlegge uka for deg.</p>
 
   <!-- Week plan -->
   <section>
-    <h2>This week</h2>
-    <button class="wide" id="pickWeekBtn">🎲 Pick my week</button>
-    <div class="hint">Tap 🔓 to lock a dinner you like. Picking again only changes the unlocked days.</div>
+    <h2>Denne uka</h2>
+    <button class="wide" id="pickWeekBtn">🎲 Velg ukas middager</button>
+    <div class="hint">Trykk på 🔓 for å låse en middag du liker. Når du velger på nytt, endres bare de ulåste dagene.</div>
     <ul class="week" id="weekList"></ul>
   </section>
 
   <!-- Shopping list -->
   <section>
-    <h2>Shopping list</h2>
+    <h2>Handleliste</h2>
     <div id="shoppingList"></div>
     <div class="form-buttons" id="shoppingButtons">
-      <button class="secondary" id="clearTicksBtn">Clear ticks</button>
-      <button class="secondary" id="editCategoriesBtn">Change categories</button>
+      <button class="secondary" id="clearTicksBtn">Fjern alle haker</button>
+      <button class="secondary" id="editCategoriesBtn">Endre kategorier</button>
     </div>
   </section>
 
   <!-- Add / edit form -->
   <section>
-    <h2 id="formTitle">Add a dinner</h2>
+    <h2 id="formTitle">Legg til middag</h2>
     <form id="dinnerForm">
-      <label for="nameInput">Dinner name</label>
-      <input id="nameInput" type="text" placeholder="e.g. Fish tacos" required>
+      <label for="nameInput">Navn på middagen</label>
+      <input id="nameInput" type="text" placeholder="f.eks. Fisketaco" required>
 
-      <label for="ingredientsInput">Ingredients</label>
-      <textarea id="ingredientsInput" placeholder="One ingredient per line"></textarea>
-      <div class="hint">Write one ingredient on each line.</div>
+      <label for="ingredientsInput">Ingredienser</label>
+      <textarea id="ingredientsInput" placeholder="Én ingrediens per linje"></textarea>
+      <div class="hint">Skriv én ingrediens på hver linje.</div>
 
       <div class="form-buttons">
-        <button type="submit" id="saveBtn">Add dinner</button>
-        <button type="button" class="secondary" id="cancelBtn" hidden>Cancel</button>
+        <button type="submit" id="saveBtn">Legg til middag</button>
+        <button type="button" class="secondary" id="cancelBtn" hidden>Avbryt</button>
       </div>
     </form>
   </section>
 
   <!-- Saved dinners -->
   <section>
-    <h2>My dinners (<span id="dinnerCount">0</span>)</h2>
+    <h2>Mine middager (<span id="dinnerCount">0</span>)</h2>
     <div id="dinnerList"></div>
   </section>
 </main>
@@ -213,31 +213,76 @@
     "Dry goods", "Spices & sauces", "Frozen", "Other"
   ];
 
-  // Words used to guess an ingredient's category.
+  // The names shown on the page for each category
+  // (the English names above are only used behind the scenes, so saved choices keep working)
+  const CATEGORY_LABELS = {
+    "Fruit & vegetables": "Frukt og grønt",
+    "Bread & bakery": "Brød og bakevarer",
+    "Meat & fish": "Kjøtt og fisk",
+    "Dairy & eggs": "Meieri og egg",
+    "Dry goods": "Tørrvarer",
+    "Spices & sauces": "Krydder og sauser",
+    "Frozen": "Frysevarer",
+    "Other": "Annet"
+  };
+
+  // Words used to guess an ingredient's category (Norwegian and English).
+  // A word matches if it is at the start or the end of a word in the ingredient,
+  // so "løk" matches both "løk" and "purreløk".
   // Checked from top to bottom, and the first match wins
-  // (so "coconut milk" becomes Dry goods before "milk" can make it Dairy).
+  // (so "kokosmelk" becomes Dry goods before "melk" can make it Dairy).
   const CATEGORY_WORDS = [
-    ["Fruit & vegetables", ["bell pepper", "sweet pepper", "red pepper", "green pepper", "eggplant"]],
-    ["Frozen", ["frozen", "fish finger", "ice cream"]],
-    ["Spices & sauces", ["spice", "seasoning", "salt", "pepper", "sauce", "paste", "ketchup", "mustard",
-      "mayo", "remoulade", "dressing", "soy", "vinegar", "oil", "curry", "cumin", "paprika", "oregano",
-      "cinnamon", "pesto", "salsa", "chili powder"]],
-    ["Dry goods", ["canned", "tinned", "stock", "broth", "coconut milk", "pasta", "spaghetti", "macaroni",
-      "noodle", "lasagne", "lasagna", "rice", "flour", "sugar", "taco shell", "tortilla", "lentil",
-      "chickpea", "kidney bean", "oat", "cereal", "nuts", "crisps"]],
-    ["Bread & bakery", ["bread", "dough", "bun", "baguette", "pita", "naan", "wrap", "crispbread"]],
-    ["Meat & fish", ["beef", "mince", "pork", "chicken", "turkey", "lamb", "bacon", "ham", "sausage",
-      "salami", "meat", "steak", "fish", "salmon", "cod", "tuna", "shrimp", "prawn", "mussel", "fillet"]],
-    ["Dairy & eggs", ["milk", "cream", "cheese", "butter", "yogurt", "yoghurt", "egg", "mozzarella",
-      "parmesan", "feta", "cottage", "margarine"]],
-    ["Fruit & vegetables", ["onion", "garlic", "potato", "carrot", "tomato", "lettuce", "salad", "cucumber",
-      "broccoli", "leek", "lemon", "lime", "apple", "banana", "mushroom", "pea", "spinach", "cabbage",
-      "cauliflower", "avocado", "corn", "zucchini", "courgette", "ginger", "herb", "parsley", "coriander",
-      "basil", "celery", "bean", "berr", "fruit", "vegetable", "squash", "pumpkin", "chili", "orange"]]
+    ["Spices & sauces", ["paprikapulver", "chilipulver", "chili powder"]],
+    ["Fruit & vegetables", ["paprika", "bell pepper", "sweet pepper", "red pepper", "green pepper", "eggplant"]],
+    ["Meat & fish", ["kjøttdeig", "kjøttboller", "kjøttkaker", "sausage"]],
+    ["Dairy & eggs", ["goat cheese"]],
+    ["Frozen", ["frossen", "frosne", "fryst", "fiskepinne", "iskrem", "pommes frites",
+      "frozen", "fish finger", "ice cream"]],
+    ["Spices & sauces", ["krydder", "salt", "pepper", "saus", "sennep", "majones", "remulade", "remoulade", "dressing",
+      "soya", "eddik", "olje", "ketsjup", "ketchup", "pesto", "salsa", "karri", "curry", "kanel", "oregano",
+      "spice", "seasoning", "sauce", "paste", "mustard", "mayo", "soy", "vinegar", "oil", "cumin",
+      "cinnamon"]],
+    ["Dry goods", ["hermetisk", "buljong", "kokosmelk", "pasta", "spagetti", "spaghetti", "makaroni",
+      "nudler", "lasagneplater", "ris", "hvetemel", "maismel", "sukker", "tacoskjell", "tortilla", "linser",
+      "kikerter", "havregryn", "nøtter", "potetgull",
+      "canned", "tinned", "stock", "broth", "coconut milk", "macaroni", "noodle", "lasagne", "lasagna",
+      "rice", "flour", "sugar", "taco shell", "lentil", "chickpea", "kidney bean", "oat", "cereal", "nuts",
+      "crisps"]],
+    ["Bread & bakery", ["brød", "deig", "rundstykke", "bolle", "baguette", "pita", "lompe", "lefse",
+      "bread", "dough", "bun", "naan", "wrap"]],
+    ["Meat & fish", ["kjøtt", "storfe", "svin", "kylling", "kalkun", "lam", "bacon", "skinke", "pølse",
+      "salami", "biff", "fisk", "laks", "torsk", "sei", "tunfisk", "reke", "scampi", "blåskjell", "filet",
+      "karbonade", "ribbe",
+      "beef", "mince", "pork", "chicken", "turkey", "ham", "meat", "steak", "fish", "salmon", "cod",
+      "tuna", "shrimp", "prawn", "mussel", "fillet"]],
+    ["Dairy & eggs", ["melk", "fløte", "ost", "smør", "yoghurt", "egg", "rømme", "crème fraîche",
+      "creme fraiche", "mozzarella", "parmesan", "feta", "cottage", "margarin", "kesam",
+      "milk", "cream", "cheese", "butter", "yogurt"]],
+    ["Fruit & vegetables", ["løk", "purre", "potet", "gulrot", "gulrøtter", "tomat", "salat", "agurk",
+      "brokkoli", "kål", "sitron", "lime", "eple", "banan", "sopp", "sjampinjong", "champignon", "erter", "spinat",
+      "avokado", "mais", "squash", "ingefær", "persille", "koriander", "basilikum", "selleri", "bær",
+      "frukt", "grønnsak", "gresskar", "appelsin", "druer", "bønne",
+      "onion", "garlic", "potato", "carrot", "tomato", "lettuce", "salad", "cucumber", "broccoli", "leek",
+      "lemon", "apple", "banana", "mushroom", "pea", "spinach", "cabbage", "cauliflower", "avocado",
+      "corn", "zucchini", "courgette", "ginger", "herb", "parsley", "coriander", "basil", "celery", "bean",
+      "berr", "fruit", "vegetable", "pumpkin", "chili", "orange"]]
   ];
-  const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const DAYS = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"];
 
   const EXAMPLE_DINNERS = [
+    { name: "Spagetti bolognese", ingredients: ["Spagetti", "Kjøttdeig", "Løk", "Hvitløk", "Hermetiske tomater", "Parmesan"] },
+    { name: "Taco", ingredients: ["Tacoskjell", "Kjøttdeig", "Tacokrydder", "Isbergsalat", "Tomater", "Revet ost", "Rømme"] },
+    { name: "Laks med poteter", ingredients: ["Laksefilet", "Poteter", "Brokkoli", "Sitron", "Smør"] },
+    { name: "Kyllingcurry", ingredients: ["Kyllingfilet", "Currypasta", "Kokosmelk", "Løk", "Ris"] },
+    { name: "Hjemmelaget pizza", ingredients: ["Pizzadeig", "Tomatsaus", "Mozzarella", "Skinke", "Sjampinjong"] },
+    { name: "Grønnsakssuppe", ingredients: ["Gulrøtter", "Poteter", "Purreløk", "Løk", "Grønnsaksbuljong", "Brød"] },
+    { name: "Fiskepinner", ingredients: ["Fiskepinner", "Poteter", "Erter", "Remulade"] },
+    { name: "Omelett med salat", ingredients: ["Egg", "Melk", "Ost", "Skinke", "Isbergsalat", "Agurk"] }
+  ];
+
+  // The old English example dinners, in the same order as above.
+  // If you still have one of these unchanged, it is swapped for the Norwegian version.
+  const OLD_ENGLISH_EXAMPLES = [
     { name: "Spaghetti Bolognese", ingredients: ["Spaghetti", "Minced beef", "Onion", "Garlic", "Canned tomatoes", "Parmesan"] },
     { name: "Tacos", ingredients: ["Taco shells", "Minced beef", "Taco spice", "Lettuce", "Tomatoes", "Cheese", "Sour cream"] },
     { name: "Salmon with potatoes", ingredients: ["Salmon fillets", "Potatoes", "Broccoli", "Lemon", "Butter"] },
@@ -248,10 +293,22 @@
     { name: "Omelette with salad", ingredients: ["Eggs", "Milk", "Cheese", "Ham", "Lettuce", "Cucumber"] }
   ];
 
+  function translateOldExamples(list) {
+    list.forEach(dinner => {
+      const i = OLD_ENGLISH_EXAMPLES.findIndex(old =>
+        old.name === dinner.name && old.ingredients.join("|") === dinner.ingredients.join("|"));
+      if (i !== -1) {
+        dinner.name = EXAMPLE_DINNERS[i].name;
+        dinner.ingredients = EXAMPLE_DINNERS[i].ingredients.slice();
+      }
+    });
+    return list;
+  }
+
   function loadDinners() {
     try {
       const saved = localStorage.getItem(DINNERS_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) return translateOldExamples(JSON.parse(saved));
     } catch (e) {}
     // First visit: start with example dinners
     return EXAMPLE_DINNERS.map(d => ({ id: makeId(), name: d.name, ingredients: d.ingredients.slice() }));
@@ -289,7 +346,7 @@
       localStorage.setItem(CHECKED_KEY, JSON.stringify(checked));
       localStorage.setItem(MY_CATEGORIES_KEY, JSON.stringify(myCategories));
     } catch (e) {
-      alert("Sorry, your dinners could not be saved in this browser.");
+      alert("Beklager, middagene kunne ikke lagres i denne nettleseren.");
     }
   }
 
@@ -329,17 +386,17 @@
   function renderDinners() {
     dinnerCount.textContent = dinners.length;
     if (dinners.length === 0) {
-      dinnerList.innerHTML = '<p class="empty">No dinners yet. Add your first one above.</p>';
+      dinnerList.innerHTML = '<p class="empty">Ingen middager ennå. Legg til din første over.</p>';
       return;
     }
-    const sorted = dinners.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = dinners.slice().sort((a, b) => a.name.localeCompare(b.name, "nb"));
     dinnerList.innerHTML = sorted.map(d => `
       <div class="dinner">
         <h3>${escapeHtml(d.name)}</h3>
-        <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "No ingredients added"}</p>
+        <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "Ingen ingredienser lagt til"}</p>
         <div class="actions">
-          <button class="secondary" data-edit="${d.id}">Edit</button>
-          <button class="danger" data-delete="${d.id}">Delete</button>
+          <button class="secondary" data-edit="${d.id}">Rediger</button>
+          <button class="danger" data-delete="${d.id}">Slett</button>
         </div>
       </div>
     `).join("");
@@ -348,20 +405,20 @@
   // ---------- Show the week ----------
   function renderWeek() {
     if (week.length === 0) {
-      weekList.innerHTML = '<li class="empty">Tap "Pick my week" to get 7 dinners.</li>';
+      weekList.innerHTML = '<li class="empty">Trykk «Velg ukas middager» for å få 7 middager.</li>';
       renderShopping();
       return;
     }
     weekList.innerHTML = DAYS.map((day, i) => {
       const dinner = dinners.find(d => d.id === week[i]);
-      const name = dinner ? escapeHtml(dinner.name) : '<span class="empty">(dinner was deleted)</span>';
+      const name = dinner ? escapeHtml(dinner.name) : '<span class="empty">(middagen er slettet)</span>';
       const isLocked = locked[i] && dinner;
+      const lockText = `${isLocked ? "Lås opp" : "Lås"} ${day.toLowerCase()}`;
       return `<li class="${isLocked ? "locked" : ""}">
         <span class="day">${day}</span>
         <span class="meal">${name}</span>
-        <button class="lock" data-day="${i}"
-          title="${isLocked ? "Unlock" : "Lock"} ${day}"
-          aria-label="${isLocked ? "Unlock" : "Lock"} ${day}">${isLocked ? "🔒" : "🔓"}</button>
+        <button class="lock" data-day="${i}" title="${lockText}"
+          aria-label="${lockText}">${isLocked ? "🔒" : "🔓"}</button>
       </li>`;
     }).join("");
     renderShopping();
@@ -380,12 +437,16 @@
 
   // Guess the category from words in the ingredient name
   function guessCategory(key) {
+    const parts = key.split(/[^a-zæøåéèêëîïôûüç]+/);
     for (const [category, words] of CATEGORY_WORDS) {
       for (const word of words) {
-        // The word must start at the beginning of a word in the ingredient
-        const start = key.indexOf(word);
-        if (start === -1) continue;
-        if (start === 0 || !/[a-zæøå]/.test(key[start - 1])) return category;
+        if (word.includes(" ")) {
+          // Phrases like "coconut milk" must start at the beginning of a word
+          const start = key.indexOf(word);
+          if (start !== -1 && (start === 0 || !/[a-zæøå]/.test(key[start - 1]))) return category;
+        } else if (parts.some(part => part.startsWith(word) || part.endsWith(word))) {
+          return category;
+        }
       }
     }
     return "Other";
@@ -416,7 +477,7 @@
     const items = getShoppingItems();
     shoppingButtons.hidden = items.length === 0;
     if (items.length === 0) {
-      shoppingList.innerHTML = '<p class="empty">Pick your week to see the shopping list.</p>';
+      shoppingList.innerHTML = '<p class="empty">Velg ukas middager for å se handlelisten.</p>';
       return;
     }
 
@@ -434,15 +495,15 @@
         .sort((a, b) => {
           // Not-ticked items first, then ticked items at the bottom
           const tickDiff = checked.includes(a.key) - checked.includes(b.key);
-          return tickDiff || a.name.localeCompare(b.name);
+          return tickDiff || a.name.localeCompare(b.name, "nb");
         });
       if (inCategory.length === 0) return;
 
-      html += `<h3 class="category-title">${category}</h3>`;
+      html += `<h3 class="category-title">${CATEGORY_LABELS[category]}</h3>`;
       inCategory.forEach(item => {
         const isChecked = checked.includes(item.key);
         const options = CATEGORY_ORDER.map(c =>
-          `<option ${c === category ? "selected" : ""}>${c}</option>`).join("");
+          `<option value="${c}" ${c === category ? "selected" : ""}>${CATEGORY_LABELS[c]}</option>`).join("");
         html += `
           <div class="item ${isChecked ? "checked" : ""}">
             <label>
@@ -451,7 +512,7 @@
               ${item.count > 1 ? `<span class="count">×${item.count}</span>` : ""}
             </label>
             ${editingCategories
-              ? `<select data-key="${escapeAttr(item.key)}" aria-label="Category for ${escapeAttr(item.name)}">${options}</select>`
+              ? `<select data-key="${escapeAttr(item.key)}" aria-label="Kategori for ${escapeAttr(item.name)}">${options}</select>`
               : ""}
           </div>`;
       });
@@ -484,7 +545,7 @@
 
   editCategoriesBtn.addEventListener("click", () => {
     editingCategories = !editingCategories;
-    editCategoriesBtn.textContent = editingCategories ? "Done" : "Change categories";
+    editCategoriesBtn.textContent = editingCategories ? "Ferdig" : "Endre kategorier";
     renderShopping();
   });
 
@@ -510,7 +571,7 @@
 
   pickWeekBtn.addEventListener("click", () => {
     if (dinners.length === 0) {
-      alert("Add some dinners first.");
+      alert("Legg til noen middager først.");
       return;
     }
     // A day stays the same only if it is locked and its dinner still exists
@@ -561,8 +622,8 @@
   function resetForm() {
     editingId = null;
     form.reset();
-    formTitle.textContent = "Add a dinner";
-    saveBtn.textContent = "Add dinner";
+    formTitle.textContent = "Legg til middag";
+    saveBtn.textContent = "Legg til middag";
     cancelBtn.hidden = true;
   }
 
@@ -572,8 +633,8 @@
     editingId = id;
     nameInput.value = dinner.name;
     ingredientsInput.value = dinner.ingredients.join("\n");
-    formTitle.textContent = "Edit dinner";
-    saveBtn.textContent = "Save changes";
+    formTitle.textContent = "Rediger middag";
+    saveBtn.textContent = "Lagre endringer";
     cancelBtn.hidden = false;
     form.scrollIntoView({ behavior: "smooth", block: "start" });
     nameInput.focus();
@@ -586,7 +647,7 @@
     if (editId) startEditing(editId);
     if (deleteId) {
       const dinner = dinners.find(d => d.id === deleteId);
-      if (dinner && confirm(`Delete "${dinner.name}"?`)) {
+      if (dinner && confirm(`Slette «${dinner.name}»?`)) {
         dinners = dinners.filter(d => d.id !== deleteId);
         if (editingId === deleteId) resetForm();
         save();
