@@ -728,10 +728,12 @@
     if (navigator.share) {
       try {
         await navigator.share({ title: "Handleliste", text });
+        return;
       } catch (e) {
-        // Closing the share menu without choosing anything is fine – do nothing
+        // Closing the share menu without choosing anything is fine – do nothing.
+        // If sharing failed for another reason, try copying instead (below).
+        if (e && e.name === "AbortError") return;
       }
-      return;
     }
     // Otherwise: copy the list so it can be pasted into an e-mail or message
     try {
