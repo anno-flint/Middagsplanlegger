@@ -70,11 +70,25 @@
   .week { list-style: none; padding: 0; margin: 16px 0 0; }
   .week li {
     display: flex;
+    align-items: center;
     gap: 12px;
-    padding: 12px 0;
+    padding: 8px 8px;
     border-top: 1px solid var(--border);
+    border-radius: 8px;
   }
+  .week li.locked { background: #eef6f1; }
   .week .day { font-weight: 700; width: 100px; flex-shrink: 0; color: var(--accent); }
+  .week .meal { flex: 1; }
+  .week .lock {
+    flex-shrink: 0;
+    min-width: 48px;
+    padding: 8px 10px;
+    font-size: 1.2rem;
+    background: #ece7de;
+  }
+  .week .lock:hover { background: #e0d9cc; }
+  .week li.locked .lock { background: var(--accent); }
+  .week li.locked .lock:hover { background: var(--accent-dark); }
   .empty { color: var(--muted); font-style: italic; }
 
   .dinner {
@@ -102,6 +116,7 @@
   <section>
     <h2>This week</h2>
     <button class="wide" id="pickWeekBtn">🎲 Pick my week</button>
+    <div class="hint">Tap 🔓 to lock a dinner you like. Picking again only changes the unlocked days.</div>
     <ul class="week" id="weekList"></ul>
   </section>
 
@@ -134,6 +149,7 @@
   // ---------- Saved data ----------
   const DINNERS_KEY = "dinnerPlanner.dinners";
   const WEEK_KEY = "dinnerPlanner.week";
+  const LOCKED_KEY = "dinnerPlanner.locked";
   const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   const EXAMPLE_DINNERS = [
@@ -164,10 +180,19 @@
     return [];
   }
 
+  function loadLocked() {
+    try {
+      const saved = localStorage.getItem(LOCKED_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [false, false, false, false, false, false, false];
+  }
+
   function save() {
     try {
       localStorage.setItem(DINNERS_KEY, JSON.stringify(dinners));
       localStorage.setItem(WEEK_KEY, JSON.stringify(week));
+      localStorage.setItem(LOCKED_KEY, JSON.stringify(locked));
     } catch (e) {
       alert("Sorry, your dinners could not be saved in this browser.");
     }
@@ -179,6 +204,7 @@
 
   let dinners = loadDinners();
   let week = loadWeek();     // list of 7 dinner ids, Monday to Sunday
+  let locked = loadLocked(); // 7 true/false values: is that day locked?
   let editingId = null;      // id of the dinner being edited, or null when adding
   save();
 
@@ -230,9 +256,26 @@
     weekList.innerHTML = DAYS.map((day, i) => {
       const dinner = dinners.find(d => d.id === week[i]);
       const name = dinner ? escapeHtml(dinner.name) : '<span class="empty">(dinner was deleted)</span>';
-      return `<li><span class="day">${day}</span><span>${name}</span></li>`;
+      const isLocked = locked[i] && dinner;
+      return `<li class="${isLocked ? "locked" : ""}">
+        <span class="day">${day}</span>
+        <span class="meal">${name}</span>
+        <button class="lock" data-day="${i}"
+          title="${isLocked ? "Unlock" : "Lock"} ${day}"
+          aria-label="${isLocked ? "Unlock" : "Lock"} ${day}">${isLocked ? "🔒" : "🔓"}</button>
+      </li>`;
     }).join("");
   }
+
+  // ---------- Lock / unlock a day ----------
+  weekList.addEventListener("click", (event) => {
+    const button = event.target.closest(".lock");
+    if (!button) return;
+    const i = Number(button.dataset.day);
+    locked[i] = !locked[i];
+    save();
+    renderWeek();
+  });
 
   // ---------- Pick 7 random dinners ----------
   function shuffle(list) {
@@ -249,12 +292,20 @@
       alert("Add some dinners first.");
       return;
     }
-    // Use each dinner once if possible. With fewer than 7 dinners, some repeat.
-    let picked = [];
-    while (picked.length < 7) {
+    // A day stays the same only if it is locked and its dinner still exists
+    const keep = DAYS.map((_, i) =>
+      locked[i] && dinners.some(d => d.id === week[i]) ? week[i] : null);
+    const openDays = keep.filter(id => id === null).length;
+
+    // Fill open days with dinners not already locked in, if there are enough.
+    // With too few dinners, some will repeat.
+    const notUsed = dinners.filter(d => !keep.includes(d.id));
+    let picked = shuffle(notUsed);
+    while (picked.length < openDays) {
       picked = picked.concat(shuffle(dinners));
     }
-    week = picked.slice(0, 7).map(d => d.id);
+    week = keep.map(id => id !== null ? id : picked.shift().id);
+    locked = keep.map(id => id !== null);
     save();
     renderWeek();
   });
