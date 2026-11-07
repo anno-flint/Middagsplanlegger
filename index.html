@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dinner Planner</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --text: #2b2b2b;
+    --muted: #6b6b6b;
+    --accent: #2f7d5b;
+    --accent-dark: #24614a;
+    --danger: #c0392b;
+    --border: #e6e1d8;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.5;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 1.8rem; margin: 12px 0 4px; }
+  h2 { font-size: 1.3rem; margin: 0 0 12px; }
+  .subtitle { color: var(--muted); margin: 0 0 20px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+  button {
+    font: inherit;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 18px;
+    min-height: 48px;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.secondary { background: #ece7de; color: var(--text); }
+  button.secondary:hover { background: #e0d9cc; }
+  button.danger { background: #fbeae8; color: var(--danger); }
+  button.danger:hover { background: #f5d6d2; }
+  button.wide { width: 100%; }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  input, textarea {
+    font: inherit;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+  }
+  textarea { min-height: 130px; resize: vertical; }
+  .hint { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+  .form-buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .form-buttons button { flex: 1; }
+
+  .week { list-style: none; padding: 0; margin: 16px 0 0; }
+  .week li {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+  }
+  .week .day { font-weight: 700; width: 100px; flex-shrink: 0; color: var(--accent); }
+  .empty { color: var(--muted); font-style: italic; }
+
+  .dinner {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 12px;
+  }
+  .dinner h3 { margin: 0 0 6px; font-size: 1.1rem; }
+  .dinner p { margin: 0 0 12px; color: var(--muted); }
+  .dinner .actions { display: flex; gap: 10px; }
+  .dinner .actions button { flex: 1; }
+
+  @media (max-width: 480px) {
+    .week .day { width: 85px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Dinner Planner</h1>
+  <p class="subtitle">Save your dinners and let the page plan your week.</p>
+
+  <!-- Week plan -->
+  <section>
+    <h2>This week</h2>
+    <button class="wide" id="pickWeekBtn">🎲 Pick my week</button>
+    <ul class="week" id="weekList"></ul>
+  </section>
+
+  <!-- Add / edit form -->
+  <section>
+    <h2 id="formTitle">Add a dinner</h2>
+    <form id="dinnerForm">
+      <label for="nameInput">Dinner name</label>
+      <input id="nameInput" type="text" placeholder="e.g. Fish tacos" required>
+
+      <label for="ingredientsInput">Ingredients</label>
+      <textarea id="ingredientsInput" placeholder="One ingredient per line"></textarea>
+      <div class="hint">Write one ingredient on each line.</div>
+
+      <div class="form-buttons">
+        <button type="submit" id="saveBtn">Add dinner</button>
+        <button type="button" class="secondary" id="cancelBtn" hidden>Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Saved dinners -->
+  <section>
+    <h2>My dinners (<span id="dinnerCount">0</span>)</h2>
+    <div id="dinnerList"></div>
+  </section>
+</main>
+
+<script>
+  // ---------- Saved data ----------
+  const DINNERS_KEY = "dinnerPlanner.dinners";
+  const WEEK_KEY = "dinnerPlanner.week";
+  const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  const EXAMPLE_DINNERS = [
+    { name: "Spaghetti Bolognese", ingredients: ["Spaghetti", "Minced beef", "Onion", "Garlic", "Canned tomatoes", "Parmesan"] },
+    { name: "Tacos", ingredients: ["Taco shells", "Minced beef", "Taco spice", "Lettuce", "Tomatoes", "Cheese", "Sour cream"] },
+    { name: "Salmon with potatoes", ingredients: ["Salmon fillets", "Potatoes", "Broccoli", "Lemon", "Butter"] },
+    { name: "Chicken curry", ingredients: ["Chicken breast", "Curry paste", "Coconut milk", "Onion", "Rice"] },
+    { name: "Homemade pizza", ingredients: ["Pizza dough", "Tomato sauce", "Mozzarella", "Ham", "Mushrooms"] },
+    { name: "Vegetable soup", ingredients: ["Carrots", "Potatoes", "Leek", "Onion", "Vegetable stock", "Bread"] },
+    { name: "Fish fingers", ingredients: ["Fish fingers", "Potatoes", "Peas", "Remoulade"] },
+    { name: "Omelette with salad", ingredients: ["Eggs", "Milk", "Cheese", "Ham", "Lettuce", "Cucumber"] }
+  ];
+
+  function loadDinners() {
+    try {
+      const saved = localStorage.getItem(DINNERS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    // First visit: start with example dinners
+    return EXAMPLE_DINNERS.map(d => ({ id: makeId(), name: d.name, ingredients: d.ingredients.slice() }));
+  }
+
+  function loadWeek() {
+    try {
+      const saved = localStorage.getItem(WEEK_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(DINNERS_KEY, JSON.stringify(dinners));
+      localStorage.setItem(WEEK_KEY, JSON.stringify(week));
+    } catch (e) {
+      alert("Sorry, your dinners could not be saved in this browser.");
+    }
+  }
+
+  function makeId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  let dinners = loadDinners();
+  let week = loadWeek();     // list of 7 dinner ids, Monday to Sunday
+  let editingId = null;      // id of the dinner being edited, or null when adding
+  save();
+
+  // ---------- Page elements ----------
+  const form = document.getElementById("dinnerForm");
+  const nameInput = document.getElementById("nameInput");
+  const ingredientsInput = document.getElementById("ingredientsInput");
+  const formTitle = document.getElementById("formTitle");
+  const saveBtn = document.getElementById("saveBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const dinnerList = document.getElementById("dinnerList");
+  const dinnerCount = document.getElementById("dinnerCount");
+  const weekList = document.getElementById("weekList");
+  const pickWeekBtn = document.getElementById("pickWeekBtn");
+
+  // Makes text safe to show on the page
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ---------- Show dinners ----------
+  function renderDinners() {
+    dinnerCount.textContent = dinners.length;
+    if (dinners.length === 0) {
+      dinnerList.innerHTML = '<p class="empty">No dinners yet. Add your first one above.</p>';
+      return;
+    }
+    const sorted = dinners.slice().sort((a, b) => a.name.localeCompare(b.name));
+    dinnerList.innerHTML = sorted.map(d => `
+      <div class="dinner">
+        <h3>${escapeHtml(d.name)}</h3>
+        <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "No ingredients added"}</p>
+        <div class="actions">
+          <button class="secondary" data-edit="${d.id}">Edit</button>
+          <button class="danger" data-delete="${d.id}">Delete</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  // ---------- Show the week ----------
+  function renderWeek() {
+    if (week.length === 0) {
+      weekList.innerHTML = '<li class="empty">Tap "Pick my week" to get 7 dinners.</li>';
+      return;
+    }
+    weekList.innerHTML = DAYS.map((day, i) => {
+      const dinner = dinners.find(d => d.id === week[i]);
+      const name = dinner ? escapeHtml(dinner.name) : '<span class="empty">(dinner was deleted)</span>';
+      return `<li><span class="day">${day}</span><span>${name}</span></li>`;
+    }).join("");
+  }
+
+  // ---------- Pick 7 random dinners ----------
+  function shuffle(list) {
+    const copy = list.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  pickWeekBtn.addEventListener("click", () => {
+    if (dinners.length === 0) {
+      alert("Add some dinners first.");
+      return;
+    }
+    // Use each dinner once if possible. With fewer than 7 dinners, some repeat.
+    let picked = [];
+    while (picked.length < 7) {
+      picked = picked.concat(shuffle(dinners));
+    }
+    week = picked.slice(0, 7).map(d => d.id);
+    save();
+    renderWeek();
+  });
+
+  // ---------- Add / edit form ----------
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = nameInput.value.trim();
+    if (!name) return;
+    const ingredients = ingredientsInput.value
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line !== "");
+
+    if (editingId) {
+      const dinner = dinners.find(d => d.id === editingId);
+      if (dinner) {
+        dinner.name = name;
+        dinner.ingredients = ingredients;
+      }
+    } else {
+      dinners.push({ id: makeId(), name, ingredients });
+    }
+    save();
+    resetForm();
+    renderDinners();
+    renderWeek();
+  });
+
+  cancelBtn.addEventListener("click", resetForm);
+
+  function resetForm() {
+    editingId = null;
+    form.reset();
+    formTitle.textContent = "Add a dinner";
+    saveBtn.textContent = "Add dinner";
+    cancelBtn.hidden = true;
+  }
+
+  function startEditing(id) {
+    const dinner = dinners.find(d => d.id === id);
+    if (!dinner) return;
+    editingId = id;
+    nameInput.value = dinner.name;
+    ingredientsInput.value = dinner.ingredients.join("\n");
+    formTitle.textContent = "Edit dinner";
+    saveBtn.textContent = "Save changes";
+    cancelBtn.hidden = false;
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+    nameInput.focus();
+  }
+
+  // ---------- Edit and delete buttons ----------
+  dinnerList.addEventListener("click", (event) => {
+    const editId = event.target.dataset.edit;
+    const deleteId = event.target.dataset.delete;
+    if (editId) startEditing(editId);
+    if (deleteId) {
+      const dinner = dinners.find(d => d.id === deleteId);
+      if (dinner && confirm(`Delete "${dinner.name}"?`)) {
+        dinners = dinners.filter(d => d.id !== deleteId);
+        if (editingId === deleteId) resetForm();
+        save();
+        renderDinners();
+        renderWeek();
+      }
+    }
+  });
+
+  renderDinners();
+  renderWeek();
+</script>
+</body>
+</html>
