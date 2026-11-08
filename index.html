@@ -350,13 +350,17 @@
     familyRef = firebase.database().ref("families/" + FAMILY_CODE);
   } catch (e) {}
 
-  // What was last sent online, so unchanged things (like photos) are not sent again
+  // What was last sent to or received from online, so unchanged things (like photos) are not sent again
   const lastSentOnline = {};
+
+  // Becomes true once the online data has been read when the page opens.
+  // Until then nothing is sent, so this phone does not overwrite the family's data.
+  let onlineReady = false;
 
   // Sends the data online. Each part is saved as text, exactly like in the browser,
   // because the online database would otherwise change empty lists and empty days.
   function saveOnline(parts) {
-    if (!familyRef) return;
+    if (!familyRef || !onlineReady) return;
     const changes = {};
     Object.keys(parts).forEach(name => {
       const text = JSON.stringify(parts[name]);
@@ -512,6 +516,11 @@
   }
 
   function save() {
+    saveInBrowser();
+    saveOnline({ dinners, week, locked, checked, myCategories });
+  }
+
+  function saveInBrowser() {
     try {
       localStorage.setItem(DINNERS_KEY, JSON.stringify(dinners));
       localStorage.setItem(WEEK_KEY, JSON.stringify(week));
@@ -521,7 +530,6 @@
     } catch (e) {
       alert("Beklager, middagene kunne ikke lagres i denne nettleseren.");
     }
-    saveOnline({ dinners, week, locked, checked, myCategories });
   }
 
   function makeId() {
@@ -1018,6 +1026,47 @@
 
   renderDinners();
   renderWeek();
+
+  // ---------- Live updates from the family ----------
+  // Runs when the page opens, and again every time someone in the family changes something.
+  if (familyRef) {
+    familyRef.on("value", snapshot => {
+      const online = snapshot.val() || {};
+      let changed = false;
+
+      // Takes one part (like the week plan) from online, if it is different from what we have
+      function take(name, apply) {
+        const text = online[name];
+        if (typeof text !== "string" || text === lastSentOnline[name]) return;
+        try {
+          apply(JSON.parse(text));
+          lastSentOnline[name] = text;
+          changed = true;
+        } catch (e) {}
+      }
+      take("dinners", value => { dinners = value; });
+      take("week", value => { week = value; });
+      take("locked", value => { locked = value; });
+      take("checked", value => { checked = value; });
+      take("myCategories", value => { myCategories = value; });
+
+      if (changed) {
+        // Someone else deleted the dinner we are editing or about to delete
+        if (editingId && !dinners.some(d => d.id === editingId)) resetForm();
+        if (confirmingDeleteId && !dinners.some(d => d.id === confirmingDeleteId)) confirmingDeleteId = null;
+        saveInBrowser();
+        renderDinners();
+        renderWeek();
+      }
+
+      if (!onlineReady) {
+        // First time: now we know what the family has. Send anything that is missing
+        // online (for example everything, the very first time the family uses the app).
+        onlineReady = true;
+        save();
+      }
+    });
+  }
 </script>
 </body>
 </html>
