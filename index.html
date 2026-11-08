@@ -321,7 +321,58 @@
   </section>
 </main>
 
+<!-- Firebase: Google's online database, so the family can share the same data -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
 <script>
+  // ---------- Online storage (Firebase) ----------
+  // These settings are the "address" of our database. They are not secret:
+  // the database rules (set up in the Firebase website) decide who may read and write.
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDYD0cG_Qax9ChZW6R12Zta61YsDq3WM5k",
+    authDomain: "middagsplanlegger-nikri.firebaseapp.com",
+    databaseURL: "https://middagsplanlegger-nikri-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "middagsplanlegger-nikri",
+    storageBucket: "middagsplanlegger-nikri.firebasestorage.app",
+    messagingSenderId: "789592826641",
+    appId: "1:789592826641:web:1d152fbb06e578552be2b0"
+  };
+
+  // For now everyone uses the same test family. A real family code comes in a later step.
+  const FAMILY_CODE = "test";
+
+  // The family's folder in the online database, or null if Firebase could not be loaded
+  // (for example with no internet). The page then still works and saves in the browser only.
+  let familyRef = null;
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    familyRef = firebase.database().ref("families/" + FAMILY_CODE);
+  } catch (e) {}
+
+  // What was last sent online, so unchanged things (like photos) are not sent again
+  const lastSentOnline = {};
+
+  // Sends the data online. Each part is saved as text, exactly like in the browser,
+  // because the online database would otherwise change empty lists and empty days.
+  function saveOnline(parts) {
+    if (!familyRef) return;
+    const changes = {};
+    Object.keys(parts).forEach(name => {
+      const text = JSON.stringify(parts[name]);
+      if (lastSentOnline[name] !== text) {
+        changes[name] = text;
+        lastSentOnline[name] = text;
+      }
+    });
+    if (Object.keys(changes).length > 0) {
+      familyRef.update(changes).catch(() => {
+        // Could not save online; forget what we "sent" so it is tried again next time
+        Object.keys(changes).forEach(name => delete lastSentOnline[name]);
+      });
+    }
+  }
+
   // ---------- Saved data ----------
   const DINNERS_KEY = "dinnerPlanner.dinners";
   const WEEK_KEY = "dinnerPlanner.week";
@@ -470,6 +521,7 @@
     } catch (e) {
       alert("Beklager, middagene kunne ikke lagres i denne nettleseren.");
     }
+    saveOnline({ dinners, week, locked, checked, myCategories });
   }
 
   function makeId() {
