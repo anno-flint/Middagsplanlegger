@@ -12,12 +12,17 @@
         ".write": "auth != null && (data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('owner').val() === auth.uid))",
         "members": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && auth.token.email_verified === true && root.child('invites').child(auth.token.email.toLowerCase().replace('.', ',')).child($fid).exists()"
+            ".write": "auth != null && auth.uid === $uid && ((newData.child('viaLink').isString() && root.child('inviteLinks').child(newData.child('viaLink').val()).child('family').val() === $fid && root.child('inviteLinks').child(newData.child('viaLink').val()).child('createdAt').val() > now - 604800000) || (auth.token.email_verified === true && root.child('invites').child(auth.token.email.toLowerCase().replace('.', ',')).child($fid).exists()))"
           }
         },
         "invites": {
           "$emailKey": {
             ".write": "auth != null && auth.token.email_verified === true && !newData.exists() && $emailKey === auth.token.email.toLowerCase().replace('.', ',')"
+          }
+        },
+        "linkInvites": {
+          "$token": {
+            ".write": "auth != null && !newData.exists() && root.child('inviteLinks').child($token).child('family').val() === $fid"
           }
         }
       }
@@ -29,6 +34,12 @@
         "$fid": {
           ".write": "auth != null && root.child('families').child($fid).child('members').child(auth.uid).exists()"
         }
+      }
+    },
+    "inviteLinks": {
+      "$token": {
+        ".read": true,
+        ".write": "auth != null && (!newData.exists() || (!data.exists() && newData.child('family').isString() && newData.child('createdAt').val() === now && root.child('families').child(newData.child('family').val()).child('members').child(auth.uid).exists()))"
       }
     }
   }

@@ -240,6 +240,16 @@
     background: #eef6f1; border-radius: 10px; color: var(--accent-dark);
   }
   .invite-form { margin-top: 8px; }
+  #shareInviteBtn { margin-top: 4px; }
+  .join-box {
+    margin-top: 16px; padding: 14px;
+    background: #eef6f1; border: 1px solid #cfe5d8; border-radius: 12px;
+  }
+  .join-box h3 { margin: 0 0 4px; font-size: 1.1rem; }
+  .join-box p { margin: 0 0 4px; }
+  .join-box button { margin-top: 10px; }
+  /* While someone is being invited, hide the other ways to sign in so it is not confusing */
+  .menu-panel.joining #signedOutView { display: none; }
   .invite-form button { margin-top: 10px; }
   .account-email { margin: 0 0 10px; overflow-wrap: anywhere; }
 
@@ -360,6 +370,18 @@
     </button>
   </div>
 
+  <!-- Shown when someone opens an invitation link -->
+  <div class="join-box" id="joinBox" hidden>
+    <h3>Du er invitert</h3>
+    <p id="joinText"></p>
+    <form id="joinForm">
+      <label for="joinNameInput">Navnet ditt</label>
+      <input id="joinNameInput" type="text" placeholder="f.eks. Kristin" autocomplete="given-name">
+      <button type="submit" class="wide">Bli med i familien</button>
+      <button type="button" class="secondary wide" id="joinNoBtn">Nei takk</button>
+    </form>
+  </div>
+
   <h3 class="menu-section">Familien</h3>
   <div id="signedOutView">
     <p class="hint">Du er ikke logget inn, så endringer lagres bare på denne enheten. Logg inn for å dele ukeplanen og handlelisten med familien.</p>
@@ -379,8 +401,11 @@
       <label for="inviteInput">Inviter noen</label>
       <input id="inviteInput" type="email" placeholder="navn@gmail.com" autocomplete="off">
       <button type="submit" class="wide">Send invitasjon</button>
-      <div class="hint">De blir med når de logger inn med denne Google-kontoen.</div>
+      <div class="hint">De blir med når de logger inn med denne e-postadressen.</div>
     </form>
+    <div class="or-line"><span>eller</span></div>
+    <button class="secondary wide" id="shareInviteBtn">Del invitasjonslenke</button>
+    <div class="hint">Send lenken på SMS eller Messenger. Den som trykker på den, blir med i familien uten å logge inn. Lenken virker én gang og i 7 dager.</div>
 
     <h3 class="menu-section">Konto</h3>
     <p class="account-email" id="signedInText"></p>
@@ -1221,6 +1246,9 @@
   let members = {};          // everyone in the family: { id: { name, email } }
   let pendingInvites = {};   // invited, but not signed in yet: { emailKey: { email } }
   let confirmingRemoveId = null; // the member asking «Sikker?» before being removed
+  let pendingLinks = {};     // invitation links not used yet: { token: { createdAt } }
+  const LINK_LIFETIME = 7 * 24 * 60 * 60 * 1000; // an invitation link works for 7 days
+  const JOIN_KEY = "dinnerPlanner.joinInvite";   // remembers «Bli med» while signing in
 
   function showFamilyMessage(text) {
     familyMessage.textContent = text;
@@ -1263,14 +1291,30 @@
           <span class="role">Invitert, venter</span></span>
         <button class="secondary" data-cancel-invite="${escapeAttr(key)}">Angre</button>
       </li>`);
-    memberList.innerHTML = memberRows.concat(inviteRows).join("");
+    const linkRows = Object.keys(pendingLinks)
+      .filter(token => Date.now() - (pendingLinks[token].createdAt || 0) < LINK_LIFETIME)
+      .map(token => `<li>
+        <span class="avatar pending" aria-hidden="true">&#8599;</span>
+        <span class="who">Invitasjonslenke
+          <span class="role">Ikke brukt ennå</span></span>
+        <button class="secondary" data-cancel-link="${escapeAttr(token)}">Angre</button>
+      </li>`);
+    memberList.innerHTML = memberRows.concat(inviteRows, linkRows).join("");
   }
 
   memberList.addEventListener("click", async e => {
     const removeBtn = e.target.closest("[data-remove]");
     const cancelBtn = e.target.closest("[data-cancel-invite]");
+    const cancelLinkBtn = e.target.closest("[data-cancel-link]");
     try {
-      if (removeBtn) {
+      if (cancelLinkBtn) {
+        const token = cancelLinkBtn.dataset.cancelLink;
+        await db.ref().update({
+          ["families/" + familyId + "/linkInvites/" + token]: null,
+          ["inviteLinks/" + token]: null
+        });
+        showToast("Lenken virker ikke lenger");
+      } else if (removeBtn) {
         const id = removeBtn.dataset.remove;
         if (confirmingRemoveId !== id) {
           confirmingRemoveId = id; // first tap: ask «Sikker?»
@@ -1395,14 +1439,144 @@
   finishEmailSignIn();
 
   signOutBtn.addEventListener("click", async () => {
+    if (currentUser && currentUser.isAnonymous &&
+        !confirm("Du ble med via en lenke. Hvis du logger ut, trenger du en ny invitasjon for å komme tilbake. Logge ut likevel?")) {
+      return;
+    }
     await auth.signOut();
     location.reload(); // start fresh, so nothing from the family is still connected
   });
+
+  // ---------- Share an invitation link ----------
+  const shareInviteBtn = document.getElementById("shareInviteBtn");
+
+  function makeToken() {
+    // A long random code that nobody can guess
+    const bytes = new Uint8Array(18);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  shareInviteBtn.addEventListener("click", async () => {
+    const token = makeToken();
+    const myName = currentUser.displayName || members[currentUser.uid]?.name || currentUser.email || "";
+    try {
+      await db.ref().update({
+        ["inviteLinks/" + token]: {
+          family: familyId,
+          invitedBy: myName,
+          createdAt: firebase.database.ServerValue.TIMESTAMP
+        },
+        ["families/" + familyId + "/linkInvites/" + token]: {
+          createdAt: firebase.database.ServerValue.TIMESTAMP
+        }
+      });
+    } catch (err) {
+      showToast("Kunne ikke lage lenken. Sjekk internett og prøv igjen.");
+      return;
+    }
+    const link = location.origin + location.pathname + "?invite=" + token;
+    const text = (myName ? myName + " har" : "Du er") + " invitert deg til middagsplanleggeren vår:";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Middagsplanlegger", text, url: link });
+        return;
+      }
+    } catch (err) {
+      if (err.name === "AbortError") return; // closed the share menu: the link is still made
+    }
+    try {
+      await navigator.clipboard.writeText(text + " " + link);
+      showToast("Lenken er kopiert. Lim den inn i en melding.");
+    } catch (err) {
+      prompt("Kopier lenken og send den:", link);
+    }
+  });
+
+  // ---------- Opened an invitation link ----------
+  const joinBox = document.getElementById("joinBox");
+  const joinText = document.getElementById("joinText");
+  const joinForm = document.getElementById("joinForm");
+  const joinNameInput = document.getElementById("joinNameInput");
+  const joinNoBtn = document.getElementById("joinNoBtn");
+  let openedInviteToken = null;
+
+  async function checkInviteLink() {
+    const token = new URLSearchParams(location.search).get("invite");
+    if (!token || !db) return;
+    history.replaceState(null, "", location.pathname); // tidy the address bar
+    let invite = null;
+    try { invite = (await db.ref("inviteLinks/" + token).get()).val(); } catch (e) {}
+    showMenu(true);
+    if (!invite || Date.now() - invite.createdAt > LINK_LIFETIME) {
+      showFamilyMessage("Denne invitasjonslenken er brukt eller for gammel. Be om en ny.");
+      return;
+    }
+    openedInviteToken = token;
+    joinText.textContent = (invite.invitedBy || "Noen") + " har invitert deg til å dele ukeplan og handleliste.";
+    if (currentUser && currentUser.displayName) joinNameInput.value = currentUser.displayName;
+    joinBox.hidden = false;
+    menuPanel.classList.add("joining");
+  }
+
+  joinForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    const name = joinNameInput.value.trim();
+    if (!name) {
+      showToast("Skriv inn navnet ditt");
+      joinNameInput.focus();
+      return;
+    }
+    try { localStorage.setItem(JOIN_KEY, JSON.stringify({ token: openedInviteToken, name })); } catch (err) {}
+    joinBox.hidden = true;
+    if (currentUser) {
+      location.reload(); // already signed in: start over, and join the family while loading
+    } else {
+      try {
+        await auth.signInAnonymously(); // a sign-in without e-mail or password
+      } catch (err) {
+        joinBox.hidden = false;
+        showFamilyMessage("Kunne ikke bli med akkurat nå. Prøv igjen.");
+      }
+    }
+  });
+
+  joinNoBtn.addEventListener("click", () => {
+    joinBox.hidden = true;
+    menuPanel.classList.remove("joining");
+    openedInviteToken = null;
+  });
+  checkInviteLink();
+
+  // Joins the family from an invitation link, if «Bli med» was tapped. Returns the family, or null.
+  async function joinFromLink(user) {
+    let join = null;
+    try { join = JSON.parse(localStorage.getItem(JOIN_KEY)); } catch (e) {}
+    if (!join || !join.token) return null;
+    try { localStorage.removeItem(JOIN_KEY); } catch (e) {}
+    const invite = (await db.ref("inviteLinks/" + join.token).get()).val();
+    if (!invite) {
+      showToast("Invitasjonen er brukt eller for gammel. Be om en ny.");
+      return null;
+    }
+    await db.ref().update({
+      ["families/" + invite.family + "/members/" + user.uid]: { name: join.name, email: user.email || "", viaLink: join.token },
+      ["families/" + invite.family + "/linkInvites/" + join.token]: null,
+      ["inviteLinks/" + join.token]: null,
+      ["users/" + user.uid + "/family"]: invite.family
+    });
+    showToast("Du er med i familien til " + (invite.invitedBy || "en annen"));
+    return invite.family;
+  }
 
   // Finds your family. If someone has invited you, you join their family.
   // Otherwise you keep your own family, or get a new one the first time you sign in.
   async function findOrCreateFamily(user) {
     const me = { name: user.displayName || "", email: user.email || "" };
+
+    // Tapped «Bli med» on an invitation link?
+    const joined = await joinFromLink(user);
+    if (joined) return joined;
 
     // Has someone invited this e-mail address?
     if (user.email) {
@@ -1423,6 +1597,9 @@
 
     const saved = await db.ref("users/" + user.uid + "/family").get();
     if (saved.exists()) return saved.val();
+
+    // Joined with a link, but no family any more: such an account can't start its own family
+    if (user.isAnonymous) return null;
 
     const newFamilyId = db.ref("families").push().key; // a new, random family number
     await db.ref().update({
@@ -1447,10 +1624,20 @@
       signedInView.hidden = !user;
       menuDot.hidden = !!user;
       if (!user) return;
-      signedInText.textContent = user.email || user.displayName;
+      signedInText.textContent = user.isAnonymous
+        ? "Du er med via en invitasjonslenke (uten e-post)."
+        : (user.email || user.displayName);
       try {
         familyId = await findOrCreateFamily(user);
+        if (!familyId) {
+          // A link-only account that is no longer in any family: nothing more it can do
+          await auth.signOut();
+          showMenu(true);
+          showFamilyMessage("Du er ikke med i noen familie. Be om en ny invitasjon.");
+          return;
+        }
         const family = db.ref("families/" + familyId);
+        family.child("linkInvites").on("value", s => { pendingLinks = s.val() || {}; renderMembers(); });
         family.child("owner").on("value", s => { familyOwner = s.val(); renderMembers(); });
         family.child("members").on("value", s => {
           members = s.val() || {};
