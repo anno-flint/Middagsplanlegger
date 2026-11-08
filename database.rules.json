@@ -9,7 +9,26 @@
     "families": {
       "$fid": {
         ".read": "auth != null && data.child('members').child(auth.uid).exists()",
-        ".write": "auth != null && (data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('owner').val() === auth.uid))"
+        ".write": "auth != null && (data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('owner').val() === auth.uid))",
+        "members": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && auth.token.email_verified === true && root.child('invites').child(auth.token.email.toLowerCase().replace('.', ',')).child($fid).exists()"
+          }
+        },
+        "invites": {
+          "$emailKey": {
+            ".write": "auth != null && auth.token.email_verified === true && !newData.exists() && $emailKey === auth.token.email.toLowerCase().replace('.', ',')"
+          }
+        }
+      }
+    },
+    "invites": {
+      "$emailKey": {
+        ".read": "auth != null && auth.token.email_verified === true && $emailKey === auth.token.email.toLowerCase().replace('.', ',')",
+        ".write": "auth != null && auth.token.email_verified === true && !newData.exists() && $emailKey === auth.token.email.toLowerCase().replace('.', ',')",
+        "$fid": {
+          ".write": "auth != null && root.child('families').child($fid).child('members').child(auth.uid).exists()"
+        }
       }
     }
   }

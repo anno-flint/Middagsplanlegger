@@ -162,8 +162,86 @@
   }
   .empty { color: var(--muted); font-style: italic; }
   .family-message { margin: 12px 0 0; color: var(--danger); font-weight: 600; }
+
+  /* Header bar that stays at the top while you scroll */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px;
+  }
+  .topbar h1 { font-size: 1.35rem; margin: 0; }
+  .menu-btn {
+    position: relative;
+    width: 48px; height: 48px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #ece7de; color: var(--text);
+  }
+  .menu-btn:hover { background: #e0d9cc; }
+  /* Small dot on the menu button when you are not signed in */
+  .menu-dot {
+    position: absolute; top: 8px; right: 8px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #ece7de;
+  }
+  main .subtitle { margin-top: 4px; }
+
+  /* The menu that slides in from the right */
+  .menu-shade {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .menu-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 21;
+    width: min(360px, 88vw);
+    overflow-y: auto;
+    background: var(--bg);
+    padding: 12px 18px 32px;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.12);
+    animation: slideIn 0.2s ease-out;
+  }
+  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  @media (prefers-reduced-motion: reduce) { .menu-panel { animation: none; } }
+  body.menu-open { overflow: hidden; }
+  .menu-head { display: flex; align-items: center; justify-content: space-between; }
+  .menu-head h2 { margin: 0; }
+  .menu-section {
+    font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--muted); margin: 24px 0 8px;
+  }
   #signedOutView .hint { margin: 0 0 12px; }
-  #signedInView .section-head { margin-bottom: 4px; }
+  .members { list-style: none; padding: 0; margin: 0; }
+  .members li {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-top: 1px solid var(--border);
+  }
+  .members li:last-child { border-bottom: 1px solid var(--border); }
+  .avatar {
+    flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #eef6f1; color: var(--accent-dark); font-weight: 700; font-size: 0.85rem;
+  }
+  .avatar.pending { background: #f1ece3; color: var(--muted); }
+  .members .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .members .role { display: block; color: var(--muted); font-size: 0.85rem; }
+  .members button { min-height: 40px; padding: 8px 12px; font-size: 0.9rem; }
+  .invite-form { margin-top: 8px; }
+  .invite-form button { margin-top: 10px; }
+  .account-email { margin: 0 0 10px; overflow-wrap: anywhere; }
+
+  /* Short message at the bottom of the screen */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; z-index: 30;
+    transform: translateX(-50%);
+    width: max-content; max-width: calc(100vw - 32px);
+    background: var(--text); color: #fff;
+    padding: 12px 18px; border-radius: 12px;
+    font-weight: 600;
+  }
 
   /* Heading that folds a section open and closed */
   .collapse-toggle {
@@ -251,26 +329,53 @@
 </style>
 </head>
 <body>
-<main>
-  <h1>Middagsplanlegger</h1>
-  <p class="subtitle">Lagre middagene dine og la siden planlegge uka for deg.</p>
+<!-- Header bar that stays at the top, with the menu button -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>Middagsplanlegger</h1>
+    <button class="menu-btn" id="menuBtn" aria-label="Åpne meny" aria-expanded="false" aria-controls="menuPanel">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span class="menu-dot" id="menuDot" hidden></span>
+    </button>
+  </div>
+</header>
 
-  <!-- Signing in, so the family can share the same dinners and shopping list -->
-  <section id="familyBox" hidden>
-    <div id="signedOutView">
-      <h2>Del med familien</h2>
-      <p class="hint">Du er ikke logget inn, så endringer lagres bare på denne enheten. Logg inn for å dele ukeplanen og handlelisten med familien.</p>
-      <button class="wide" id="signInBtn">Logg inn med Google</button>
-    </div>
-    <div id="signedInView" hidden>
-      <div class="section-head">
-        <h2>👨‍👩‍👧 Familien</h2>
-        <button class="secondary" id="signOutBtn">Logg ut</button>
-      </div>
-      <p class="hint" id="signedInText"></p>
-    </div>
-    <p class="family-message" id="familyMessage" hidden></p>
-  </section>
+<!-- The menu that slides in from the right -->
+<div class="menu-shade" id="menuShade" hidden></div>
+<aside class="menu-panel" id="menuPanel" aria-label="Meny" hidden>
+  <div class="menu-head">
+    <h2>Meny</h2>
+    <button class="menu-btn" id="menuCloseBtn" aria-label="Lukk meny">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <h3 class="menu-section">Familien</h3>
+  <div id="signedOutView">
+    <p class="hint">Du er ikke logget inn, så endringer lagres bare på denne enheten. Logg inn for å dele ukeplanen og handlelisten med familien.</p>
+    <button class="wide" id="signInBtn">Logg inn med Google</button>
+  </div>
+  <div id="signedInView" hidden>
+    <ul class="members" id="memberList"></ul>
+    <form id="inviteForm" class="invite-form">
+      <label for="inviteInput">Inviter noen</label>
+      <input id="inviteInput" type="email" placeholder="navn@gmail.com" autocomplete="off">
+      <button type="submit" class="wide">Send invitasjon</button>
+      <div class="hint">De blir med når de logger inn med denne Google-kontoen.</div>
+    </form>
+
+    <h3 class="menu-section">Konto</h3>
+    <p class="account-email" id="signedInText"></p>
+    <button class="secondary wide" id="signOutBtn">Logg ut</button>
+  </div>
+  <p class="family-message" id="familyMessage" hidden></p>
+</aside>
+
+<!-- Short message at the bottom of the screen that disappears by itself -->
+<div class="toast" id="toast" role="status" hidden></div>
+
+<main>
+  <p class="subtitle">Lagre middagene dine og la siden planlegge uka for deg.</p>
 
   <!-- Week plan -->
   <section>
@@ -1050,19 +1155,155 @@
   renderDinners();
   renderWeek();
 
+  // ---------- The menu ----------
+  const menuBtn = document.getElementById("menuBtn");
+  const menuCloseBtn = document.getElementById("menuCloseBtn");
+  const menuPanel = document.getElementById("menuPanel");
+  const menuShade = document.getElementById("menuShade");
+  const menuDot = document.getElementById("menuDot");
+
+  function showMenu(open) {
+    menuPanel.hidden = !open;
+    menuShade.hidden = !open;
+    menuBtn.setAttribute("aria-expanded", open);
+    document.body.classList.toggle("menu-open", open);
+    if (open) menuCloseBtn.focus(); else menuBtn.focus();
+  }
+  menuBtn.addEventListener("click", () => showMenu(true));
+  menuCloseBtn.addEventListener("click", () => showMenu(false));
+  menuShade.addEventListener("click", () => showMenu(false));
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !menuPanel.hidden) showMenu(false);
+  });
+
+  // ---------- Short message at the bottom of the screen ----------
+  const toast = document.getElementById("toast");
+  let toastTimer = null;
+  function showToast(text) {
+    toast.textContent = text;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
+  }
+
   // ---------- Signing in and the family ----------
-  const familyBox = document.getElementById("familyBox");
   const signedOutView = document.getElementById("signedOutView");
   const signedInView = document.getElementById("signedInView");
   const signedInText = document.getElementById("signedInText");
   const familyMessage = document.getElementById("familyMessage");
   const signInBtn = document.getElementById("signInBtn");
   const signOutBtn = document.getElementById("signOutBtn");
+  const memberList = document.getElementById("memberList");
+  const inviteForm = document.getElementById("inviteForm");
+  const inviteInput = document.getElementById("inviteInput");
+
+  let currentUser = null;
+  let familyId = null;
+  let familyOwner = null;
+  let members = {};          // everyone in the family: { id: { name, email } }
+  let pendingInvites = {};   // invited, but not signed in yet: { emailKey: { email } }
+  let confirmingRemoveId = null; // the member asking «Sikker?» before being removed
 
   function showFamilyMessage(text) {
     familyMessage.textContent = text;
     familyMessage.hidden = !text;
   }
+
+  // The online database can't use "." in names, so e-mail addresses are stored with "," instead
+  function emailKey(email) {
+    return email.trim().toLowerCase().replace(/\./g, ",");
+  }
+
+  function initials(name, email) {
+    const words = (name || email || "?").trim().split(/\s+/);
+    return ((words[0][0] || "") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+  }
+
+  // ---------- Show the family in the menu ----------
+  function renderMembers() {
+    const iAmOwner = currentUser && familyOwner === currentUser.uid;
+    const memberRows = Object.keys(members).map(id => {
+      const m = members[id];
+      const isMe = currentUser && id === currentUser.uid;
+      const role = id === familyOwner ? "Eier" : "Medlem";
+      let button = "";
+      if (iAmOwner && !isMe) {
+        button = confirmingRemoveId === id
+          ? `<button class="danger-strong" data-remove="${escapeAttr(id)}">Sikker?</button>`
+          : `<button class="danger" data-remove="${escapeAttr(id)}">Fjern</button>`;
+      }
+      return `<li>
+        <span class="avatar">${escapeHtml(initials(m.name, m.email))}</span>
+        <span class="who">${escapeHtml(m.name || m.email)}${isMe ? " (deg)" : ""}
+          <span class="role">${role}</span></span>
+        ${button}
+      </li>`;
+    });
+    const inviteRows = Object.keys(pendingInvites).map(key => `<li>
+        <span class="avatar pending" aria-hidden="true">@</span>
+        <span class="who">${escapeHtml(pendingInvites[key].email)}
+          <span class="role">Invitert, venter</span></span>
+        <button class="secondary" data-cancel-invite="${escapeAttr(key)}">Angre</button>
+      </li>`);
+    memberList.innerHTML = memberRows.concat(inviteRows).join("");
+  }
+
+  memberList.addEventListener("click", async e => {
+    const removeBtn = e.target.closest("[data-remove]");
+    const cancelBtn = e.target.closest("[data-cancel-invite]");
+    try {
+      if (removeBtn) {
+        const id = removeBtn.dataset.remove;
+        if (confirmingRemoveId !== id) {
+          confirmingRemoveId = id; // first tap: ask «Sikker?»
+          renderMembers();
+          return;
+        }
+        confirmingRemoveId = null;
+        const name = members[id] ? (members[id].name || members[id].email) : "";
+        await db.ref("families/" + familyId + "/members/" + id).remove();
+        showToast(name + " er fjernet fra familien");
+      } else if (cancelBtn) {
+        const key = cancelBtn.dataset.cancelInvite;
+        await db.ref().update({
+          ["families/" + familyId + "/invites/" + key]: null,
+          ["invites/" + key + "/" + familyId]: null
+        });
+        showToast("Invitasjonen er trukket tilbake");
+      }
+    } catch (err) {
+      showToast("Det virket ikke. Sjekk internett og prøv igjen.");
+    }
+  });
+
+  // ---------- Invite someone ----------
+  inviteForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    const email = inviteInput.value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /[#$\[\]\/]/.test(email)) {
+      showToast("Skriv inn en gyldig e-postadresse");
+      return;
+    }
+    const alreadyMember = Object.values(members).some(m => (m.email || "").toLowerCase() === email);
+    if (alreadyMember) {
+      showToast("Denne personen er allerede med i familien");
+      return;
+    }
+    const key = emailKey(email);
+    const myName = currentUser.displayName || currentUser.email;
+    try {
+      // Saved in two places: in the family (so you can see who is invited),
+      // and under the e-mail address (so the invited person finds it when they sign in)
+      await db.ref().update({
+        ["families/" + familyId + "/invites/" + key]: { email },
+        ["invites/" + key + "/" + familyId]: { invitedBy: myName }
+      });
+      inviteInput.value = "";
+      showToast("Invitasjon sendt til " + email);
+    } catch (err) {
+      showToast("Invitasjonen kunne ikke sendes. Prøv igjen.");
+    }
+  });
 
   signInBtn.addEventListener("click", async () => {
     showFamilyMessage("");
@@ -1085,35 +1326,74 @@
     location.reload(); // start fresh, so nothing from the family is still connected
   });
 
-  // Finds your family, or makes a new one with you as the owner the first time you sign in
+  // Finds your family. If someone has invited you, you join their family.
+  // Otherwise you keep your own family, or get a new one the first time you sign in.
   async function findOrCreateFamily(user) {
+    const me = { name: user.displayName || "", email: user.email || "" };
+
+    // Has someone invited this e-mail address?
+    if (user.email) {
+      const key = emailKey(user.email);
+      const invites = (await db.ref("invites/" + key).get()).val();
+      if (invites) {
+        const invitedTo = Object.keys(invites)[0];
+        await db.ref().update({
+          ["families/" + invitedTo + "/members/" + user.uid]: me,
+          ["families/" + invitedTo + "/invites/" + key]: null,
+          ["invites/" + key]: null,
+          ["users/" + user.uid + "/family"]: invitedTo
+        });
+        showToast("Du er med i familien til " + (invites[invitedTo].invitedBy || "en annen"));
+        return invitedTo;
+      }
+    }
+
     const saved = await db.ref("users/" + user.uid + "/family").get();
     if (saved.exists()) return saved.val();
 
-    const familyId = db.ref("families").push().key; // a new, random family number
+    const newFamilyId = db.ref("families").push().key; // a new, random family number
     await db.ref().update({
-      ["families/" + familyId + "/owner"]: user.uid,
-      ["families/" + familyId + "/members/" + user.uid]: { name: user.displayName || "", email: user.email || "" },
-      ["users/" + user.uid + "/family"]: familyId
+      ["families/" + newFamilyId + "/owner"]: user.uid,
+      ["families/" + newFamilyId + "/members/" + user.uid]: me,
+      ["users/" + user.uid + "/family"]: newFamilyId
     });
-    return familyId;
+    return newFamilyId;
+  }
+
+  // You were removed from the family (or it is gone): start over with a family of your own
+  async function leftFamily() {
+    try { await db.ref("users/" + currentUser.uid + "/family").remove(); } catch (e) {}
+    alert("Du er ikke lenger med i denne familien. Siden starter på nytt med din egen familie.");
+    location.reload();
   }
 
   if (auth) {
-    familyBox.hidden = false;
     auth.onAuthStateChanged(async user => {
+      currentUser = user;
       signedOutView.hidden = !!user;
       signedInView.hidden = !user;
+      menuDot.hidden = !!user;
       if (!user) return;
-      signedInText.textContent = "Logget inn som " + (user.displayName || user.email);
+      signedInText.textContent = user.email || user.displayName;
       try {
-        const familyId = await findOrCreateFamily(user);
-        familyRef = db.ref("families/" + familyId + "/data");
+        familyId = await findOrCreateFamily(user);
+        const family = db.ref("families/" + familyId);
+        family.child("owner").on("value", s => { familyOwner = s.val(); renderMembers(); });
+        family.child("members").on("value", s => {
+          members = s.val() || {};
+          renderMembers();
+        }, () => leftFamily()); // no longer allowed to read the family
+        family.child("invites").on("value", s => { pendingInvites = s.val() || {}; renderMembers(); });
+        familyRef = family.child("data");
         listenToFamily();
       } catch (e) {
         showFamilyMessage("Fikk ikke kontakt med familien din. Sjekk internett og last inn siden på nytt.");
       }
     });
+  } else {
+    // Firebase could not be loaded (for example no internet), so signing in is not possible right now
+    signInBtn.hidden = true;
+    showFamilyMessage("Innlogging er ikke tilgjengelig akkurat nå. Sjekk internett.");
   }
 
   // ---------- Live updates from the family ----------
