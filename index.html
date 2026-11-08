@@ -229,6 +229,16 @@
   .members .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .members .role { display: block; color: var(--muted); font-size: 0.85rem; }
   .members button { min-height: 40px; padding: 8px 12px; font-size: 0.9rem; }
+  .or-line {
+    display: flex; align-items: center; gap: 10px;
+    margin: 18px 0 4px; color: var(--muted); font-size: 0.9rem;
+  }
+  .or-line::before, .or-line::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+  #emailSignInForm button { margin-top: 10px; }
+  .link-sent {
+    margin-top: 12px; padding: 12px;
+    background: #eef6f1; border-radius: 10px; color: var(--accent-dark);
+  }
   .invite-form { margin-top: 8px; }
   .invite-form button { margin-top: 10px; }
   .account-email { margin: 0 0 10px; overflow-wrap: anywhere; }
@@ -354,6 +364,14 @@
   <div id="signedOutView">
     <p class="hint">Du er ikke logget inn, så endringer lagres bare på denne enheten. Logg inn for å dele ukeplanen og handlelisten med familien.</p>
     <button class="wide" id="signInBtn">Logg inn med Google</button>
+    <div class="or-line"><span>eller</span></div>
+    <form id="emailSignInForm">
+      <label for="emailSignInInput">Logg inn med e-post</label>
+      <input id="emailSignInInput" type="email" placeholder="navn@eksempel.no" autocomplete="email">
+      <button type="submit" class="secondary wide">Send innloggingslenke</button>
+      <div class="hint">Du får en e-post med en lenke. Trykk på den, så er du logget inn. Ingen passord.</div>
+    </form>
+    <div class="link-sent" id="linkSent" hidden></div>
   </div>
   <div id="signedInView" hidden>
     <ul class="members" id="memberList"></ul>
@@ -1321,6 +1339,61 @@
     }
   });
 
+  // ---------- Sign in with a link sent by e-mail (no password) ----------
+  const emailSignInForm = document.getElementById("emailSignInForm");
+  const emailSignInInput = document.getElementById("emailSignInInput");
+  const linkSent = document.getElementById("linkSent");
+  const SIGN_IN_EMAIL_KEY = "dinnerPlanner.signInEmail"; // remembers the address until the link is opened
+
+  emailSignInForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    showFamilyMessage("");
+    const email = emailSignInInput.value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("Skriv inn en gyldig e-postadresse");
+      return;
+    }
+    try {
+      // The link in the e-mail leads back to this page
+      await auth.sendSignInLinkToEmail(email, {
+        url: location.origin + location.pathname,
+        handleCodeInApp: true
+      });
+      try { localStorage.setItem(SIGN_IN_EMAIL_KEY, email); } catch (err) {}
+      linkSent.textContent = "Vi har sendt en lenke til " + email +
+        ". Åpne e-posten og trykk på lenken. Sjekk søppelpost hvis du ikke finner den.";
+      linkSent.hidden = false;
+      emailSignInInput.value = "";
+    } catch (err) {
+      showFamilyMessage(err.code === "auth/quota-exceeded"
+        ? "Det er sendt for mange e-poster i dag. Prøv igjen i morgen."
+        : "Kunne ikke sende e-posten. Sjekk adressen og prøv igjen.");
+    }
+  });
+
+  // Opened the page from the link in the e-mail: finish signing in
+  async function finishEmailSignIn() {
+    if (!auth || !auth.isSignInWithEmailLink(location.href)) return;
+    let email = null;
+    try { email = localStorage.getItem(SIGN_IN_EMAIL_KEY); } catch (err) {}
+    if (!email) {
+      // The link was opened on another phone or in another browser
+      email = prompt("Skriv inn e-postadressen du ba om lenken med:");
+    }
+    const link = location.href;
+    history.replaceState(null, "", location.pathname); // remove the long code from the address bar
+    if (!email) return;
+    try {
+      await auth.signInWithEmailLink(email.trim().toLowerCase(), link);
+      try { localStorage.removeItem(SIGN_IN_EMAIL_KEY); } catch (err) {}
+      showToast("Du er logget inn");
+    } catch (err) {
+      showMenu(true);
+      showFamilyMessage("Lenken virket ikke. Den kan være brukt eller for gammel, eller e-posten var feil. Be om en ny lenke.");
+    }
+  }
+  finishEmailSignIn();
+
   signOutBtn.addEventListener("click", async () => {
     await auth.signOut();
     location.reload(); // start fresh, so nothing from the family is still connected
@@ -1393,6 +1466,7 @@
   } else {
     // Firebase could not be loaded (for example no internet), so signing in is not possible right now
     signInBtn.hidden = true;
+    emailSignInForm.hidden = true;
     showFamilyMessage("Innlogging er ikke tilgjengelig akkurat nå. Sjekk internett.");
   }
 
