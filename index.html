@@ -161,6 +161,9 @@
     .week .lock .icon { animation: none !important; }
   }
   .empty { color: var(--muted); font-style: italic; }
+  .family-message { margin: 12px 0 0; color: var(--danger); font-weight: 600; }
+  #signedOutView .hint { margin: 0 0 12px; }
+  #signedInView .section-head { margin-bottom: 4px; }
 
   /* Heading that folds a section open and closed */
   .collapse-toggle {
@@ -252,6 +255,23 @@
   <h1>Middagsplanlegger</h1>
   <p class="subtitle">Lagre middagene dine og la siden planlegge uka for deg.</p>
 
+  <!-- Signing in, so the family can share the same dinners and shopping list -->
+  <section id="familyBox" hidden>
+    <div id="signedOutView">
+      <h2>Del med familien</h2>
+      <p class="hint">Du er ikke logget inn, så endringer lagres bare på denne enheten. Logg inn for å dele ukeplanen og handlelisten med familien.</p>
+      <button class="wide" id="signInBtn">Logg inn med Google</button>
+    </div>
+    <div id="signedInView" hidden>
+      <div class="section-head">
+        <h2>👨‍👩‍👧 Familien</h2>
+        <button class="secondary" id="signOutBtn">Logg ut</button>
+      </div>
+      <p class="hint" id="signedInText"></p>
+    </div>
+    <p class="family-message" id="familyMessage" hidden></p>
+  </section>
+
   <!-- Week plan -->
   <section>
     <h2>Denne uka</h2>
@@ -324,6 +344,7 @@
 <!-- Firebase: Google's online database, so the family can share the same data -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
   // ---------- Online storage (Firebase) ----------
@@ -339,16 +360,18 @@
     appId: "1:789592826641:web:1d152fbb06e578552be2b0"
   };
 
-  // For now everyone uses the same test family. A real family code comes in a later step.
-  const FAMILY_CODE = "test";
-
-  // The family's folder in the online database, or null if Firebase could not be loaded
+  // Firebase's database and sign-in, or null if Firebase could not be loaded
   // (for example with no internet). The page then still works and saves in the browser only.
-  let familyRef = null;
+  let db = null;
+  let auth = null;
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
-    familyRef = firebase.database().ref("families/" + FAMILY_CODE);
+    db = firebase.database();
+    auth = firebase.auth();
   } catch (e) {}
+
+  // The family's data folder in the online database. Stays null until you are signed in.
+  let familyRef = null;
 
   // What was last sent to or received from online, so unchanged things (like photos) are not sent again
   const lastSentOnline = {};
@@ -1027,9 +1050,75 @@
   renderDinners();
   renderWeek();
 
+  // ---------- Signing in and the family ----------
+  const familyBox = document.getElementById("familyBox");
+  const signedOutView = document.getElementById("signedOutView");
+  const signedInView = document.getElementById("signedInView");
+  const signedInText = document.getElementById("signedInText");
+  const familyMessage = document.getElementById("familyMessage");
+  const signInBtn = document.getElementById("signInBtn");
+  const signOutBtn = document.getElementById("signOutBtn");
+
+  function showFamilyMessage(text) {
+    familyMessage.textContent = text;
+    familyMessage.hidden = !text;
+  }
+
+  signInBtn.addEventListener("click", async () => {
+    showFamilyMessage("");
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      // Opens a small Google window to sign in
+      await auth.signInWithPopup(provider);
+    } catch (e) {
+      if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") {
+        // Some phones block the small window, so go to Google's page instead
+        auth.signInWithRedirect(provider);
+      } else if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
+        showFamilyMessage("Innloggingen virket ikke. Prøv igjen.");
+      }
+    }
+  });
+
+  signOutBtn.addEventListener("click", async () => {
+    await auth.signOut();
+    location.reload(); // start fresh, so nothing from the family is still connected
+  });
+
+  // Finds your family, or makes a new one with you as the owner the first time you sign in
+  async function findOrCreateFamily(user) {
+    const saved = await db.ref("users/" + user.uid + "/family").get();
+    if (saved.exists()) return saved.val();
+
+    const familyId = db.ref("families").push().key; // a new, random family number
+    await db.ref().update({
+      ["families/" + familyId + "/owner"]: user.uid,
+      ["families/" + familyId + "/members/" + user.uid]: { name: user.displayName || "", email: user.email || "" },
+      ["users/" + user.uid + "/family"]: familyId
+    });
+    return familyId;
+  }
+
+  if (auth) {
+    familyBox.hidden = false;
+    auth.onAuthStateChanged(async user => {
+      signedOutView.hidden = !!user;
+      signedInView.hidden = !user;
+      if (!user) return;
+      signedInText.textContent = "Logget inn som " + (user.displayName || user.email);
+      try {
+        const familyId = await findOrCreateFamily(user);
+        familyRef = db.ref("families/" + familyId + "/data");
+        listenToFamily();
+      } catch (e) {
+        showFamilyMessage("Fikk ikke kontakt med familien din. Sjekk internett og last inn siden på nytt.");
+      }
+    });
+  }
+
   // ---------- Live updates from the family ----------
-  // Runs when the page opens, and again every time someone in the family changes something.
-  if (familyRef) {
+  // Runs once you are signed in, and again every time someone in the family changes something.
+  function listenToFamily() {
     familyRef.on("value", snapshot => {
       const online = snapshot.val() || {};
       let changed = false;
