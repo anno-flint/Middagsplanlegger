@@ -289,6 +289,21 @@
   }
   .dinner-top { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
   .dinner-top .info { flex: 1; min-width: 0; }
+  .tag {
+    display: inline-block; vertical-align: middle;
+    margin-left: 6px; padding: 2px 8px; border-radius: 999px;
+    background: #f6ead7; color: #8a5a14;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .check-row {
+    display: flex; align-items: center; gap: 12px;
+    margin: 14px 0 0; cursor: pointer; min-height: 48px;
+  }
+  .check-row input {
+    width: 26px; height: 26px; padding: 0; flex-shrink: 0;
+    accent-color: var(--accent);
+  }
+  .check-row .hint { display: block; font-weight: 400; margin: 0; }
   .dinner h3 { margin: 0 0 6px; font-size: 1.1rem; }
   .dinner p { margin: 0; color: var(--muted); }
   .dinner .actions { display: flex; gap: 10px; }
@@ -467,6 +482,11 @@
       <label for="ingredientsInput">Ingredienser</label>
       <textarea id="ingredientsInput" placeholder="Én ingrediens per linje"></textarea>
       <div class="hint">Skriv én ingrediens på hver linje.</div>
+
+      <label class="check-row" for="weekendInput">
+        <input id="weekendInput" type="checkbox">
+        <span>Helgemiddag<span class="hint">Velges helst til lørdag og søndag.</span></span>
+      </label>
 
       <label>Bilde</label>
       <div class="photo-picker">
@@ -721,6 +741,7 @@
   const form = document.getElementById("dinnerForm");
   const nameInput = document.getElementById("nameInput");
   const ingredientsInput = document.getElementById("ingredientsInput");
+  const weekendInput = document.getElementById("weekendInput");
   const formTitle = document.getElementById("formTitle");
   const saveBtn = document.getElementById("saveBtn");
   const cancelBtn = document.getElementById("cancelBtn");
@@ -756,7 +777,7 @@
         <div class="dinner-top">
           ${thumbHtml(d, "big")}
           <div class="info">
-            <h3>${escapeHtml(d.name)}</h3>
+            <h3>${escapeHtml(d.name)}${d.weekend ? '<span class="tag">Helg</span>' : ""}</h3>
             <p>${d.ingredients.length ? d.ingredients.map(escapeHtml).join(", ") : "Ingen ingredienser lagt til"}</p>
           </div>
         </div>
@@ -1028,16 +1049,40 @@
     // A day stays the same only if it is locked and its dinner still exists
     const keep = DAYS.map((_, i) =>
       locked[i] && dinners.some(d => d.id === week[i]) ? week[i] : null);
-    const openDays = keep.filter(id => id === null).length;
 
-    // Fill open days with dinners not already locked in, if there are enough.
-    // With too few dinners, some will repeat.
+    // Dinners not already locked in, split into weekend dinners and everyday dinners
     const notUsed = dinners.filter(d => !keep.includes(d.id));
-    let picked = shuffle(notUsed);
-    while (picked.length < openDays) {
-      picked = picked.concat(shuffle(dinners));
+    const weekendLeft = shuffle(notUsed.filter(d => d.weekend));
+    const everydayLeft = shuffle(notUsed.filter(d => !d.weekend));
+
+    // Takes the first dinner from the first list that has one.
+    // If all are empty, a dinner is repeated (there are too few dinners for a whole week).
+    // Repeats go through the dinners in a shuffled round, so the same one isn't picked many times.
+    const repeats = new Map();
+    function take(first, second, repeatFrom) {
+      if (first.length) return first.shift();
+      if (second.length) return second.shift();
+      const pool = repeatFrom.length ? repeatFrom : dinners;
+      if (!repeats.get(pool) || repeats.get(pool).length === 0) repeats.set(pool, shuffle(pool));
+      return repeats.get(pool).shift();
     }
-    week = keep.map(id => id !== null ? id : picked.shift().id);
+    const weekendDinners = dinners.filter(d => d.weekend);
+    const everydayDinners = dinners.filter(d => !d.weekend);
+
+    const newWeek = keep.slice();
+    // Saturday and Sunday first, so they get the weekend dinners
+    [5, 6].forEach(i => {
+      if (newWeek[i] === null) {
+        newWeek[i] = take(weekendLeft, everydayLeft, weekendDinners).id;
+      }
+    });
+    // Monday to Friday: everyday dinners, and weekend dinners only if there are too few
+    [0, 1, 2, 3, 4].forEach(i => {
+      if (newWeek[i] === null) {
+        newWeek[i] = take(everydayLeft, weekendLeft, everydayDinners).id;
+      }
+    });
+    week = newWeek;
     locked = keep.map(id => id !== null);
     save();
     renderWeek();
@@ -1115,10 +1160,13 @@
         dinner.ingredients = ingredients;
         if (formPhoto) dinner.photo = formPhoto;
         else delete dinner.photo;
+        if (weekendInput.checked) dinner.weekend = true;
+        else delete dinner.weekend;
       }
     } else {
       const dinner = { id: makeId(), name, ingredients };
       if (formPhoto) dinner.photo = formPhoto;
+      if (weekendInput.checked) dinner.weekend = true;
       dinners.push(dinner);
     }
     save();
@@ -1162,6 +1210,7 @@
     editingId = id;
     nameInput.value = dinner.name;
     ingredientsInput.value = dinner.ingredients.join("\n");
+    weekendInput.checked = !!dinner.weekend;
     formPhoto = dinner.photo || null;
     showFormPhoto();
     formTitle.textContent = "Rediger middag";
